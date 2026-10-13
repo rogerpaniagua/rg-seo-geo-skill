@@ -13,7 +13,7 @@ function walk(dir, files = []) {
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return files; }
   for (const e of entries) {
-    if (IGNORE.has(e.name)) continue;
+    if (IGNORE.has(e.name) || e.isSymbolicLink()) continue;   // never follow symlinks out of the project
     const full = path.join(dir, e.name);
     if (e.isDirectory()) walk(full, files);
     else files.push(full);

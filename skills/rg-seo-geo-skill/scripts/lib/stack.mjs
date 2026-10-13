@@ -45,9 +45,10 @@ export const STACK_HINTS = {
 };
 
 /**
- * A "client-rendered shell": almost no text in the first HTML plus an empty app container.
- * Metadata and content may be added by JavaScript, which this audit does not run.
+ * A "client-rendered shell": almost no text in the first HTML plus an empty app container (or a
+ * "enable JavaScript" notice). Metadata and content may be added by JavaScript, which this audit
+ * does not run. Works on the parsed document so no regex ever runs over the raw page.
  */
-export function looksLikeClientShell(html, wordCount) {
-  return wordCount < 30 && /<div[^>]+id=["'](root|app|__nuxt|___gatsby)["'][^>]*>\s*<\/div>|<noscript>[^<]*(enable|habilit)[^<]*javascript/i.test(html);
+export function looksLikeClientShell(parsed) {
+  return parsed.wordCount < 30 && (parsed.emptyAppRoot || parsed.noscriptJsHint);
 }

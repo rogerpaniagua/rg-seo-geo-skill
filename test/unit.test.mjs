@@ -118,3 +118,59 @@ test('http→https verdict: only claim "no redirect" when HTTP really serves con
   assert.equal(httpsVerdict({ status: 429, finalUrl: 'http://a.com/' }).status, 'skip');
   assert.equal(httpsVerdict({ status: 503, finalUrl: 'http://a.com/' }).status, 'skip');
 });
+
+import { findMixedContent, imageDimensionIssues, trustSignals } from '../skills/rg-seo-geo-skill/scripts/lib/health.mjs';
+import { parseHtml as parseHtml2 } from '../skills/rg-seo-geo-skill/scripts/lib/html.mjs';
+
+test('mixed content: http:// subresources on an https page', () => {
+  const d = parseHtml2(`<html><head><link rel="stylesheet" href="http://cdn.a.com/x.css"><link rel="canonical" href="http://a.com/"><script src="http://a.com/a.js"></script></head>
+    <body><img src="http://a.com/i.png"><img src="https://a.com/ok.png"><img src="//a.com/proto-relative.png"><a href="http://other.com">link, not a subresource</a>
+    <iframe src="http://a.com/f"></iframe><video poster="http://a.com/p.jpg"></video></body></html>`);
+  const bad = findMixedContent(d.resources, 'https://a.com/').map((r) => r.url).sort();
+  assert.deepEqual(bad, ['http://a.com/a.js', 'http://a.com/f', 'http://a.com/i.png', 'http://a.com/p.jpg', 'http://cdn.a.com/x.css']);
+  assert.deepEqual(findMixedContent(d.resources, 'http://a.com/'), []);         // an http page cannot have mixed content
+});
+
+test('image dimensions: width and height attributes prevent layout shift', () => {
+  const d = parseHtml2('<img src="a.png" width="10" height="10"><img src="b.png"><img src="c.png" width="5"><img src="data:image/gif;base64,AAAA">');
+  assert.deepEqual(imageDimensionIssues(d.images), { total: 3, missing: 2 });   // data: URIs are ignored
+});
+
+test('trust signals from internal link paths (English and Spanish)', () => {
+  const t = trustSignals([{ href: '/about-us' }, { href: '/es/contacto' }, { href: 'https://x.com/privacy-policy' }, { href: '/blog' }]);
+  assert.deepEqual(t, { about: true, contact: true, privacy: true, terms: false });
+  assert.deepEqual(trustSignals([{ href: '/nosotros' }, { href: '/terminos-y-condiciones' }, { href: '/politica-de-privacidad' }]), { about: true, contact: false, privacy: true, terms: true });
+});
+
+test('regression (svelte.dev): tags with huge inline data: URIs keep their attributes', () => {
+  const big = 'a'.repeat(30_000);
+  const d = parseHtml2(`<img class="logo" src="data:image/svg+xml,${big}" alt="Logo"><img src="data:image/png;base64,${big}"><meta name="description" content="${big}">`);
+  assert.equal(d.images.length, 2);
+  assert.ok(d.images[0].src.startsWith('data:image/svg+xml,') && d.images[0].src.length > 30_000);
+  assert.equal(d.images[0].alt, 'Logo');
+  assert.equal(d.description.length, 30_000);
+});
+
+test('a start tag larger than 1 MB is skipped entirely, never counted as an attribute-less element', () => {
+  const huge = 'x'.repeat(1_200_000);
+  const d = parseHtml2(`<img data-x="${huge}"><a data-x="${huge}"><meta data-x="${huge}">`);
+  assert.equal(d.images.length, 0);
+  assert.equal(d.anchors.length, 0);
+});
+
+test('regression (bbc.com): links inside <noscript> are crawlable links, but its text is not page content', () => {
+  const d = parseHtml2(`<html><body><p>${'real '.repeat(40)}</p><noscript><nav><a href="/news">News</a><a href="/sport">Sport</a></nav><p>${'fallback '.repeat(200)}</p></noscript><a href="/home">Home</a></body></html>`);
+  assert.deepEqual(d.anchors.map((a) => a.href), ['/news', '/sport', '/home']);
+  assert.ok(d.wordCount >= 40 && d.wordCount < 60, `fallback text must not inflate the word count (got ${d.wordCount})`);
+});
+
+test('<title> inside an inline <svg> is not the page title', () => {
+  const d = parseHtml2('<html><body><svg><title>Icon label</title></svg><h1>x</h1></body><head><title>Real title</title></head></html>');
+  assert.equal(d.title, 'Real title');
+});
+
+test('lists and tables inside <noscript> do not count as content structure', () => {
+  const d = parseHtml2('<body><ul><li>a</li></ul><noscript><ul><li>x</li></ul><ol></ol><table></table></noscript><table></table></body>');
+  assert.equal(d.listCount, 1);
+  assert.equal(d.tableCount, 1);
+});

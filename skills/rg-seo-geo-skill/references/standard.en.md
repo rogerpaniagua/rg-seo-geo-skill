@@ -79,6 +79,15 @@ Every check the audit runs, in one place. This file is generated from `scripts/l
 | Advice | Heading levels do not skip (h1 → h2 → h3) | A clean outline helps accessibility and content parsing. | Fix the heading order. | Heuristic | [link](https://developers.google.com/search/docs/fundamentals/seo-starter-guide) |
 | Important | hreflang (if used) is self-referencing and well-formed | Bad hreflang makes Google ignore the language/region mapping. | Include a self-reference and an x-default. | Official | [link](https://developers.google.com/search/docs/specialty/international/localized-versions) |
 
+### Site health
+
+| Tier | Check | Why | How to fix | Basis | Source |
+|---|---|---|---|---|---|
+| Important | Internal links lead to working pages (no 404 / 410 / server errors) | Broken links waste crawl budget, frustrate users and weaken the pages they point to. Only a sample of links from the audited pages is checked. | Fix or remove the broken links, or redirect the old URL to its replacement. | Measured | [link](https://developers.google.com/search/docs/crawling-indexing/http-network-errors) |
+| Advice | Internal links point straight at the final URL (no redirect) | Every redirect adds latency and dilutes signals. Linking to the final URL is cleaner. | Update the link to the redirect target. | Measured | [link](https://developers.google.com/search/docs/crawling-indexing/301-redirects) |
+| Important | HTTPS pages load no subresources over http:// (mixed content) | Browsers block or warn about http:// scripts, styles, images and frames on https pages, which breaks the page and its security. | Load every resource over https:// (or protocol-relative paths). | Official | [link](https://web.dev/articles/what-is-mixed-content) |
+| Advice | Images declare width and height (prevents layout shift) | Without dimensions the browser cannot reserve space, so content jumps as images load (Cumulative Layout Shift). | Add width and height attributes (next/image does it for you). | Official | [link](https://web.dev/articles/optimize-cls) |
+
 ### AI search (GEO)
 
 | Tier | Check | Why | How to fix | Basis | Source |
@@ -89,6 +98,7 @@ Every check the audit runs, in one place. This file is generated from `scripts/l
 | Advice | Entity is linked to external profiles (sameAs ≥ 2) | Consistent identity across the web helps systems disambiguate who you are. | Add sameAs links to official profiles. | Heuristic | [link](https://developers.google.com/search/docs/appearance/structured-data/organization) |
 | Advice | Article-like pages show an author and a date | Google's guidance on helpful content recommends clear authorship and dates. | Show byline and dates; add author, datePublished, dateModified to JSON-LD. | Official | [link](https://developers.google.com/search/docs/fundamentals/creating-helpful-content) |
 | Advice | Content has extractable structure (lists, tables, question headings, concrete facts) | Research on AI citation finds cited pages are modular and rich in definitions, figures, comparisons and steps. Effect size is not established. | Add direct answers, numbered steps, comparison tables and specific figures where relevant. | Heuristic | [link](https://arxiv.org/pdf/2604.25707) |
+| Advice | Homepage links to About, Contact and Privacy pages | Google's helpful-content guidance asks "who is behind this content"; visible about/contact/privacy pages are the usual answer, for people and for systems judging a source. Detected from link paths only. | Add and link About, Contact and Privacy pages from the header or footer. | Heuristic | [link](https://developers.google.com/search/docs/fundamentals/creating-helpful-content) |
 | Advice | llms.txt (informational only) | Google states llms.txt has no effect on Search or AI Overviews and independent studies found no citation correlation. Harmless to keep. Never a priority. | Optional. | Heuristic | [link](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide) |
 
 ## Source code (Next.js)

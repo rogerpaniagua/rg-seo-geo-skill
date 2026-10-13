@@ -11,6 +11,7 @@ import path from 'node:path';
 import { Collector } from './lib/collector.mjs';
 import { runUrlAudit } from './lib/url-checks.mjs';
 import { runNextAudit } from './lib/next-checks.mjs';
+import { serveStatic } from './lib/static-server.mjs';
 import { buildReport, toHtml, toMarkdown } from './lib/report.mjs';
 
 const HELP = `rg-seo-geo-skill
@@ -19,14 +20,18 @@ Usage:
   node audit.mjs --url <https://site> [options]
   node audit.mjs --src <project-dir> [options]
   node audit.mjs --url <https://site> --src <project-dir>      (both)
+  node audit.mjs --build <compiled-dir>                         (before deploying; any stack)
 
 Options:
   --url <url>          Published site (or local dev server with --allow-local). Works for any stack.
   --src <dir>          Source code to inspect (Next.js App Router supported).
+  --build <dir>        Compiled site folder (dist, out, public, _site, build...). Served locally and audited before you deploy.
+                       Works for any tool that produces static HTML. Cannot be combined with --url.
   --out <dir>          Output directory (default: ./seo-geo-report)
   --pages <n>          Max pages to sample from the sitemap, including the start page (default: 6)
   --lang <es|en>       Report language (default: es)
   --allow-local        Allow localhost / private addresses (blocked by default as an SSRF guard)
+  --compare <file|auto>  Compare with a previous audit.json and add a "Progress" section. "auto" uses the one already in --out
   --fail-on <tier>     Exit with code 1 if a check of this tier or worse fails: blocker | important
   --quiet              No progress output
   -h, --help
@@ -40,10 +45,12 @@ function parseArgs(argv) {
     switch (a) {
       case '--url': o.url = next(); break;
       case '--src': o.src = next(); break;
+      case '--build': o.build = next(); break;
       case '--out': o.out = next(); break;
       case '--pages': o.pages = Math.max(1, Math.min(25, Number(next()) || 6)); break;
       case '--lang': o.lang = next(); break;
       case '--allow-local': o.allowLocal = true; break;
+      case '--compare': o.compare = next(); break;
       case '--fail-on': o.failOn = next(); break;
       case '--quiet': o.quiet = true; break;
       case '-h': case '--help': o.help = true; break;
@@ -55,7 +62,8 @@ function parseArgs(argv) {
 
 async function main() {
   const o = parseArgs(process.argv.slice(2));
-  if (o.help || (!o.url && !o.src)) { process.stdout.write(HELP); process.exit(o.help ? 0 : 2); }
+  if (o.build && o.url) throw new Error('--build and --url cannot be used together (a build is audited locally; a URL is audited as published)');
+  if (o.help || (!o.url && !o.src && !o.build)) { process.stdout.write(HELP); process.exit(o.help ? 0 : 2); }
   if (!['es', 'en'].includes(o.lang)) throw new Error('--lang must be es or en');
   if (o.failOn && !['blocker', 'important'].includes(o.failOn)) throw new Error('--fail-on must be blocker or important');
   if (o.url && !/^https?:\/\//i.test(o.url)) o.url = `https://${o.url}`;
@@ -71,6 +79,24 @@ async function main() {
     Object.assign(meta, r.meta);
     if (r.skipped) log(r.meta.note);
   }
+  if (o.build) {
+    const dir = path.resolve(o.build);
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error(`--build must be a directory: ${o.build}`);
+    const srv = await serveStatic(dir);
+    c.redact(srv.origin);
+    try {
+      log(`Serving ${path.basename(dir)} locally${srv.productionOrigin ? ` (production URLs ${srv.productionOrigin} are mapped to the local copy)` : ''}`);
+      const r = await runUrlAudit({ url: `${srv.origin}/`, allowLocal: true, maxPages: o.pages, localBuild: true }, c, log);
+      Object.assign(meta, r.meta);
+      if (r.aborted) log(`Could not audit the build: ${r.meta.error}`);
+      // Reports are shared: show the build folder name and paths only, never absolute local paths or the temporary port.
+      meta.build = true;
+      meta.buildDir = path.basename(dir);
+      meta.productionOrigin = srv.productionOrigin || undefined;
+      meta.pages = (r.meta.pages || []).map((u) => new URL(u).pathname);
+      for (const k of ['url', 'finalUrl', 'origin']) delete meta[k];
+    } finally { await srv.close(); }
+  }
   if (o.url) {
     const r = await runUrlAudit({ url: o.url, allowLocal: o.allowLocal, maxPages: o.pages }, c, log);
     Object.assign(meta, r.meta);
@@ -78,7 +104,19 @@ async function main() {
   }
 
   clearTimeout(watchdog);
-  const report = buildReport(c.results(), meta, o.lang);
+  // The previous audit is untrusted data: bounded size, parsed as JSON only, validated in compareAudits().
+  let previous;
+  if (o.compare) {
+    const file = o.compare === 'auto' ? path.join(o.out, 'audit.json') : o.compare;
+    if (fs.existsSync(file)) {
+      try {
+        if (fs.statSync(file).size > 5_000_000) throw new Error('file is larger than 5 MB');
+        previous = JSON.parse(fs.readFileSync(file, 'utf8'));
+      } catch (e) { throw new Error(`--compare: cannot read ${file}: ${e.message}`); }
+    } else if (o.compare !== 'auto') throw new Error(`--compare: file not found: ${file}`);
+    else log('--compare auto: no previous audit.json in the output folder yet; this run becomes the baseline');
+  }
+  const report = buildReport(c.results(), meta, o.lang, previous);
   fs.mkdirSync(o.out, { recursive: true });
   fs.writeFileSync(path.join(o.out, 'report.html'), toHtml(report));
   fs.writeFileSync(path.join(o.out, 'report.md'), toMarkdown(report));

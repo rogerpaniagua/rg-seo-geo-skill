@@ -18,6 +18,7 @@ export const CATEGORIES = {
   social: { en: 'Social sharing (Open Graph)', es: 'Compartir en redes (Open Graph)' },
   schema: { en: 'Structured data', es: 'Datos estructurados' },
   content: { en: 'Content & links', es: 'Contenido y enlaces' },
+  health: { en: 'Site health', es: 'Salud del sitio' },
   geo: { en: 'AI search (GEO)', es: 'Búsqueda con IA (GEO)' },
   nextjs: { en: 'Next.js implementation', es: 'Implementación en Next.js' },
 };
@@ -299,6 +300,36 @@ export const CHECKS = [
     source: `${G}/specialty/international/localized-versions`,
   },
 
+  // ---------- Site health ----------
+  {
+    id: 'health.broken-links', category: 'health', tier: 'important', basis: 'measured', mode: 'url',
+    title: { en: 'Internal links lead to working pages (no 404 / 410 / server errors)', es: 'Los enlaces internos llevan a páginas que funcionan (sin 404 / 410 / errores de servidor)' },
+    why: { en: 'Broken links waste crawl budget, frustrate users and weaken the pages they point to. Only a sample of links from the audited pages is checked.', es: 'Los enlaces rotos desperdician rastreo, frustran a los usuarios y debilitan las páginas a las que apuntan. Solo se revisa una muestra de enlaces de las páginas auditadas.' },
+    fix: { en: 'Fix or remove the broken links, or redirect the old URL to its replacement.', es: 'Corrige o quita los enlaces rotos, o redirige la URL antigua a su reemplazo.' },
+    source: `${G}/crawling-indexing/http-network-errors`,
+  },
+  {
+    id: 'health.redirected-links', category: 'health', tier: 'advice', basis: 'measured', mode: 'url',
+    title: { en: 'Internal links point straight at the final URL (no redirect)', es: 'Los enlaces internos apuntan directo a la URL final (sin redirección)' },
+    why: { en: 'Every redirect adds latency and dilutes signals. Linking to the final URL is cleaner.', es: 'Cada redirección añade latencia y diluye señales. Enlazar a la URL final es más limpio.' },
+    fix: { en: 'Update the link to the redirect target.', es: 'Actualiza el enlace al destino de la redirección.' },
+    source: `${G}/crawling-indexing/301-redirects`,
+  },
+  {
+    id: 'health.mixed-content', category: 'health', tier: 'important', basis: 'official', mode: 'url',
+    title: { en: 'HTTPS pages load no subresources over http:// (mixed content)', es: 'Las páginas HTTPS no cargan recursos por http:// (contenido mixto)' },
+    why: { en: 'Browsers block or warn about http:// scripts, styles, images and frames on https pages, which breaks the page and its security.', es: 'Los navegadores bloquean o advierten sobre scripts, estilos, imágenes y frames http:// en páginas https, lo que rompe la página y su seguridad.' },
+    fix: { en: 'Load every resource over https:// (or protocol-relative paths).', es: 'Carga todos los recursos por https:// (o con rutas relativas).' },
+    source: 'https://web.dev/articles/what-is-mixed-content',
+  },
+  {
+    id: 'health.img-dimensions', category: 'health', tier: 'advice', basis: 'official', mode: 'url',
+    title: { en: 'Images declare width and height (prevents layout shift)', es: 'Las imágenes declaran width y height (evita saltos de diseño)' },
+    why: { en: 'Without dimensions the browser cannot reserve space, so content jumps as images load (Cumulative Layout Shift).', es: 'Sin dimensiones el navegador no puede reservar espacio, y el contenido salta al cargar las imágenes (Cumulative Layout Shift).' },
+    fix: { en: 'Add width and height attributes (next/image does it for you).', es: 'Agrega los atributos width y height (next/image lo hace por ti).' },
+    source: 'https://web.dev/articles/optimize-cls',
+  },
+
   // ---------- GEO ----------
   {
     id: 'geo.search-bots', category: 'geo', tier: 'important', basis: 'measured', mode: 'url',
@@ -341,6 +372,13 @@ export const CHECKS = [
     why: { en: 'Research on AI citation finds cited pages are modular and rich in definitions, figures, comparisons and steps. Effect size is not established.', es: 'Estudios sobre citas de IA hallan que las páginas citadas son modulares y ricas en definiciones, cifras, comparaciones y pasos. El tamaño del efecto no está establecido.' },
     fix: { en: 'Add direct answers, numbered steps, comparison tables and specific figures where relevant.', es: 'Agrega respuestas directas, pasos numerados, tablas comparativas y cifras específicas donde aplique.' },
     source: 'https://arxiv.org/pdf/2604.25707',
+  },
+  {
+    id: 'geo.trust-pages', category: 'geo', tier: 'advice', basis: 'heuristic', mode: 'url',
+    title: { en: 'Homepage links to About, Contact and Privacy pages', es: 'La home enlaza a las páginas Acerca de, Contacto y Privacidad' },
+    why: { en: 'Google\'s helpful-content guidance asks "who is behind this content"; visible about/contact/privacy pages are the usual answer, for people and for systems judging a source. Detected from link paths only.', es: 'La guía de contenido útil de Google pregunta "quién está detrás de este contenido"; páginas visibles de acerca de/contacto/privacidad son la respuesta habitual, para personas y para sistemas que evalúan una fuente. Se detecta solo por la ruta de los enlaces.' },
+    fix: { en: 'Add and link About, Contact and Privacy pages from the header or footer.', es: 'Agrega y enlaza páginas de Acerca de, Contacto y Privacidad desde el encabezado o el pie.' },
+    source: `${G}/fundamentals/creating-helpful-content`,
   },
   {
     id: 'geo.llms-txt', category: 'geo', tier: 'advice', basis: 'heuristic', mode: 'url',

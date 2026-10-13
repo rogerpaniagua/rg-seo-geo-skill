@@ -18,13 +18,15 @@ const UI = {
     why: 'Why it matters', fix: 'How to fix', evidence: 'Evidence', ref: 'Reference',
     counts: { fail: 'failed', warn: 'to improve', pass: 'passed', skip: 'not evaluated' },
     nothing: 'Nothing to fix here.',
+    progressTitle: 'Progress since', resolved: 'Resolved', regressed: 'Regressions', stillOpen: 'Still open', newFindings: 'New findings', improved: 'improved', verdictChange: 'Verdict',
     validateTitle: 'Validate with official tools', validateIntro: 'This audit does not measure performance or what Google has actually indexed. Confirm those with the tools below (links are pre-filled with the audited URL).',
     stackLabel: 'Detected technology', stackNote: 'detected from page signals; may be wrong',
     shellNote: 'This page looks client-rendered: its content or tags may be added by JavaScript, which this audit does not run. Findings about missing titles, descriptions or content may differ for Google. Confirm with URL Inspection → "View crawled page" in Search Console.',
     discoveredNote: 'No sitemap was readable, so extra pages were discovered by following links from the homepage. Coverage is partial.',
     method: 'How this was measured',
     methodText: 'Checks are deterministic: they fetch your pages like a crawler and read your source files. There is no composite score on purpose: a single number would hide which problems actually block you. GEO checks marked Heuristic describe community practice; AI citation behaviour is not predictable and changes quickly. Nothing here replaces Search Console, real user data or editorial judgement.',
-    pagesChecked: 'Pages audited', urlMode: 'Published site', srcMode: 'Source code', both: 'Published site + source code',
+    pagesChecked: 'Pages audited', buildMode: 'Compiled build (audited locally, before deploy)', buildLabel: 'Build folder', prodLabel: 'Production domain',
+    urlMode: 'Published site', srcMode: 'Source code', both: 'Published site + source code',
   },
   es: {
     title: 'Reporte de calidad SEO y GEO', target: 'Objetivo', source: 'Código fuente', date: 'Fecha', mode: 'Modo',
@@ -42,15 +44,19 @@ const UI = {
     why: 'Por qué importa', fix: 'Cómo corregirlo', evidence: 'Evidencia', ref: 'Referencia',
     counts: { fail: 'fallidos', warn: 'por mejorar', pass: 'aprobados', skip: 'no evaluados' },
     nothing: 'Nada que corregir aquí.',
+    progressTitle: 'Progreso desde', resolved: 'Resueltos', regressed: 'Retrocesos', stillOpen: 'Siguen abiertos', newFindings: 'Hallazgos nuevos', improved: 'mejoró', verdictChange: 'Veredicto',
     validateTitle: 'Valida con herramientas oficiales', validateIntro: 'Esta auditoría no mide rendimiento ni lo que Google realmente tiene indexado. Confírmalo con estas herramientas (los enlaces ya llevan la URL auditada).',
     stackLabel: 'Tecnología detectada', stackNote: 'detectada por señales de la página; puede fallar',
     shellNote: 'Esta página parece renderizarse en el navegador: su contenido o etiquetas pueden agregarse con JavaScript, que esta auditoría no ejecuta. Los hallazgos de título, descripción o contenido faltante pueden ser distintos para Google. Confírmalo con Inspección de URL → "Ver página rastreada" en Search Console.',
     discoveredNote: 'No se pudo leer ningún sitemap, así que se descubrieron más páginas siguiendo los enlaces de la home. La cobertura es parcial.',
     method: 'Cómo se midió',
     methodText: 'Los checks son deterministas: leen tus páginas como un rastreador y tus archivos de código. No hay puntaje compuesto a propósito: un solo número escondería qué problemas realmente te bloquean. Los checks de GEO marcados como Heurística describen prácticas de la comunidad; el comportamiento de citación de las IA no es predecible y cambia rápido. Nada de esto reemplaza Search Console, datos de usuarios reales ni criterio editorial.',
-    pagesChecked: 'Páginas auditadas', urlMode: 'Sitio publicado', srcMode: 'Código fuente', both: 'Sitio publicado + código fuente',
+    pagesChecked: 'Páginas auditadas', buildMode: 'Build compilado (auditado en local, antes de publicar)', buildLabel: 'Carpeta del build', prodLabel: 'Dominio de producción',
+    urlMode: 'Sitio publicado', srcMode: 'Código fuente', both: 'Sitio publicado + código fuente',
   },
 };
+
+const L2 = (o, lang) => o[lang] || o.en;
 
 export function validateLinks(meta, lang = 'es') {
   if (!meta.finalUrl) return [];
@@ -68,12 +74,42 @@ export function validateLinks(meta, lang = 'es') {
   return out;
 }
 
-export function buildReport(results, meta, lang = 'es') {
+const SEVERITY = { fail: 3, warn: 2, pass: 0 };
+const KNOWN_VERDICTS = new Set(['not-ready', 'needs-work', 'solid', 'incomplete']);
+
+/**
+ * Compare the current findings with a previous audit.json. The previous file is untrusted input:
+ * unknown check ids and statuses are ignored, and the date is kept as data (renderers escape it).
+ */
+export function compareAudits(prev, current) {
+  if (!prev || !Array.isArray(prev.findings)) throw new Error('previous audit has no "findings" array');
+  const before = new Map();
+  for (const x of prev.findings) {
+    if (x && typeof x === 'object' && typeof x.id === 'string' && CHECK_BY_ID.has(x.id) && x.status in SEVERITY) before.set(x.id, SEVERITY[x.status]);
+  }
+  const out = { resolved: [], regressed: [], improved: [], stillOpen: [], newIssues: [] };
+  for (const x of current) {
+    if (!(x.status in SEVERITY)) continue;
+    const now = SEVERITY[x.status];
+    const was = before.get(x.id);
+    if (was === undefined) { if (now > 0) out.newIssues.push(x.id); continue; }
+    if (was > 0 && now === 0) out.resolved.push(x.id);
+    else if (now > was) out.regressed.push(x.id);
+    else {
+      if (now > 0 && was > 0) out.stillOpen.push(x.id);
+      if (now > 0 && now < was) out.improved.push(x.id);
+    }
+  }
+  const date = prev.meta && typeof prev.meta.date === 'string' ? prev.meta.date.slice(0, 40) : undefined;
+  return { ...out, previousDate: date, previousVerdict: KNOWN_VERDICTS.has(prev.verdict) ? prev.verdict : undefined };
+}
+
+export function buildReport(results, meta, lang = 'es', previous) {
   const t = UI[lang] || UI.es;
   const L = (o) => o[lang] || o.en;
   const findings = results.map((r) => {
     const c = CHECK_BY_ID.get(r.id);
-    return { ...r, category: c.category, tier: c.tier, basis: c.basis, title: L(c.title), why: L(c.why), fix: L(c.fix), source: c.source };
+    return { ...r, evidence: Array.isArray(r.evidence) ? r.evidence : [], category: c.category, tier: c.tier, basis: c.basis, title: L(c.title), why: L(c.why), fix: L(c.fix), source: c.source };
   });
   const count = (f) => findings.filter(f).length;
   const blockers = count((f) => f.status === 'fail' && f.tier === 'blocker');
@@ -91,15 +127,19 @@ export function buildReport(results, meta, lang = 'es') {
   const sortKey = (f) => (f.status === 'fail' ? 0 : 10) + TIER_ORDER[f.tier];
   const fixFirst = findings.filter((f) => f.status === 'fail' && f.tier !== 'advice').sort((a, b) => sortKey(a) - sortKey(b));
   const stackHint = meta.stack && STACK_HINTS[meta.stack] ? L(STACK_HINTS[meta.stack]) : null;
-  return { meta, lang, t, verdict, totals, findings, byCategory, fixFirst, validate: validateLinks(meta, lang), stackHint };
+  const progress = previous ? { ...compareAudits(previous, findings), verdict } : undefined;
+  return { meta, lang, t, verdict, totals, findings, byCategory, fixFirst, validate: validateLinks(meta, lang), stackHint, progress };
 }
 
 // ---------------- Markdown ----------------
+// Evidence is text from the audited site: neutralise HTML and link syntax so it renders as plain text.
+const mdEsc = (s) => String(s).replace(/[\\`<>\[\]()|*_]/g, (ch) => (ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : '\\' + ch));
 export function toMarkdown(r) {
   const { t, meta } = r;
   const out = [];
   out.push(`# ${t.title}`, '');
-  if (meta.url) out.push(`- **${t.target}:** ${meta.finalUrl || meta.url}`);
+  if (meta.build) out.push(`- **${t.buildLabel}:** ${mdEsc(meta.buildDir)}${meta.productionOrigin ? ` (${t.prodLabel}: ${mdEsc(meta.productionOrigin)})` : ''}`);
+  if (meta.url) out.push(`- **${t.target}:** ${mdEsc(meta.finalUrl || meta.url)}`);
   if (meta.src) out.push(`- **${t.source}:** \`${meta.src}\`${meta.framework ? ` (${meta.framework})` : ''}`);
   if (meta.stack) out.push(`- **${t.stackLabel}:** ${meta.stack} _(${t.stackNote})_${r.stackHint ? ` — ${r.stackHint}` : ''}`);
   out.push(`- **${t.date}:** ${meta.date}`, '');
@@ -107,9 +147,21 @@ export function toMarkdown(r) {
   if (meta.discoveredPages) out.push(`> ℹ️ ${t.discoveredNote}`, '');
   out.push(`## ${t.verdict[r.verdict]}`, '', t.verdictText[r.verdict], '');
   out.push(`${r.totals.fail} ${t.counts.fail} (${r.totals.blockers} ${t.tiers.blocker.toLowerCase()}) · ${r.totals.warn} ${t.counts.warn} · ${r.totals.pass} ${t.counts.pass} · ${r.totals.skip} ${t.counts.skip}`, '');
+  if (r.progress) {
+    const pr = r.progress;
+    const title = (id) => mdEsc(L2(CHECK_BY_ID.get(id).title, r.lang));
+    out.push(`## ${t.progressTitle} ${mdEsc(pr.previousDate || '?')}`, '');
+    if (pr.previousVerdict) out.push(`${t.verdictChange}: ${t.verdict[pr.previousVerdict]} → ${t.verdict[pr.verdict]}`, '');
+    for (const [key, label, icon] of [['resolved', t.resolved, '✅'], ['regressed', t.regressed, '🔻'], ['newIssues', t.newFindings, '🆕'], ['stillOpen', t.stillOpen, '⏳']]) {
+      if (!pr[key].length) continue;
+      out.push(`**${label} (${pr[key].length})**`, '');
+      pr[key].forEach((id) => out.push(`- ${icon} ${title(id)}`));
+      out.push('');
+    }
+  }
   if (r.fixFirst.length) {
     out.push(`## ${t.fixFirst}`, '');
-    r.fixFirst.forEach((f, i) => out.push(`${i + 1}. **[${t.tiers[f.tier]}] ${f.title}**  \n   ${f.fix}${f.evidence.length ? `  \n   _${t.evidence}:_ ${f.evidence.join(' | ')}` : ''}  \n   ${f.source}`));
+    r.fixFirst.forEach((f, i) => out.push(`${i + 1}. **[${t.tiers[f.tier]}] ${f.title}**  \n   ${f.fix}${f.evidence.length ? `  \n   _${t.evidence}:_ ${mdEsc(f.evidence.join(' / '))}` : ''}  \n   ${f.source}`));
     out.push('');
   }
   out.push(`## ${t.allFindings}`, '');
@@ -117,7 +169,7 @@ export function toMarkdown(r) {
     out.push(`### ${cat.name}`, '', `| | ${t.tiers.blocker}/${t.tiers.important}/${t.tiers.advice} | | ${t.evidence} |`, '|---|---|---|---|');
     for (const f of cat.items) {
       const icon = { fail: '❌', warn: '⚠️', pass: '✅', info: 'ℹ️', skip: '⏭️' }[f.status];
-      out.push(`| ${icon} | ${t.tiers[f.tier]} | ${f.title} (${t.basis[f.basis]}) | ${f.evidence.join(' / ').replace(/\|/g, '\\|')} |`);
+      out.push(`| ${icon} | ${t.tiers[f.tier]} | ${f.title} (${t.basis[f.basis]}) | ${mdEsc(f.evidence.join(' / '))} |`);
     }
     out.push('');
   }
@@ -167,7 +219,13 @@ export function toHtml(r) {
   ].join('');
   const stackLine = meta.stack ? `<br>${t.stackLabel}: <b>${esc(meta.stack)}</b> <span class="muted">(${esc(t.stackNote)})</span>${r.stackHint ? `<br><span class="muted">${esc(r.stackHint)}</span>` : ''}` : '';
   const validateHtml = r.validate.length ? `<h2>${esc(t.validateTitle)}</h2><p class="muted">${esc(t.validateIntro)}</p><ul class="validate">${r.validate.map((v) => `<li><a href="${esc(v.url)}" target="_blank" rel="noopener"><b>${esc(v.name)}</b></a><br><span class="muted">${esc(v.why)}</span></li>`).join('')}</ul>` : '';
-  const modeLabel = meta.url && meta.src ? t.both : meta.url ? t.urlMode : t.srcMode;
+  const progressHtml = (() => {
+    if (!r.progress) return '';
+    const pr = r.progress;
+    const list = (key, label, cls) => (pr[key].length ? `<p class="plabel ${cls}"><b>${esc(label)} (${pr[key].length})</b></p><ul>${pr[key].map((id) => `<li>${esc(L2(CHECK_BY_ID.get(id).title, r.lang))}</li>`).join('')}</ul>` : '');
+    return `<section class="progress"><h2>${esc(t.progressTitle)} ${esc(pr.previousDate || '?')}</h2>${pr.previousVerdict ? `<p>${esc(t.verdictChange)}: <b>${esc(t.verdict[pr.previousVerdict])}</b> → <b>${esc(t.verdict[pr.verdict])}</b></p>` : ''}${list('resolved', t.resolved, 'ok')}${list('regressed', t.regressed, 'bad')}${list('newIssues', t.newFindings, 'bad')}${list('stillOpen', t.stillOpen, 'muted')}</section>`;
+  })();
+  const modeLabel = meta.build ? t.buildMode : meta.url && meta.src ? t.both : meta.url ? t.urlMode : t.srcMode;
   return `<!doctype html>
 <html lang="${r.lang}">
 <head>
@@ -197,6 +255,7 @@ h1{font-size:1.7rem;margin:0 0 4px}h2{font-size:1.25rem;margin:36px 0 12px}h3{fo
 .tier{font-weight:600}.basis-heuristic{border-style:dashed}
 .evidence{margin:8px 0 0;padding:8px 12px 8px 28px;background:rgba(127,127,127,.1);border-radius:6px;font:.82rem/1.5 ui-monospace,Menlo,monospace;word-break:break-word}
 .banner{border-radius:8px;padding:10px 14px;margin:0 0 14px;font-size:.92rem}.banner.warn{background:var(--amb);border:1px solid var(--warn)}.banner.info{background:var(--card);border:1px solid var(--line)}
+.progress{margin-top:8px}.plabel.ok{color:var(--pass)}.plabel.bad{color:var(--fail)}.progress ul{margin:4px 0 12px;padding-left:22px}
 .validate{padding-left:20px}.validate li{margin:10px 0}
 details{margin:10px 0}summary{cursor:pointer;color:var(--muted);font-size:.92rem}
 a{color:var(--info)}.legend{font-size:.85rem;color:var(--muted);margin:8px 0 0}
@@ -208,7 +267,7 @@ footer{margin-top:40px;font-size:.88rem;color:var(--muted);border-top:1px solid 
 <body>
 <main>
   <h1>${esc(t.title)}</h1>
-  <p class="meta">${meta.url ? `${t.target}: <b>${esc(meta.finalUrl || meta.url)}</b><br>` : ''}${meta.src ? `${t.source}: <b>${esc(meta.src)}</b>${meta.framework ? ` (${esc(meta.framework)})` : ''}<br>` : ''}${t.mode}: ${esc(modeLabel)} · ${t.date}: ${esc(meta.date)}${meta.pages ? ` · ${t.pagesChecked}: ${meta.pages.length}` : ''}${stackLine}</p>
+  <p class="meta">${meta.build ? `${t.buildLabel}: <b>${esc(meta.buildDir)}</b>${meta.productionOrigin ? ` · ${t.prodLabel}: <b>${esc(meta.productionOrigin)}</b>` : ''}<br>` : ''}${meta.url ? `${t.target}: <b>${esc(meta.finalUrl || meta.url)}</b><br>` : ''}${meta.src ? `${t.source}: <b>${esc(meta.src)}</b>${meta.framework ? ` (${esc(meta.framework)})` : ''}<br>` : ''}${t.mode}: ${esc(modeLabel)} · ${t.date}: ${esc(meta.date)}${meta.pages ? ` · ${t.pagesChecked}: ${meta.pages.length}` : ''}${stackLine}</p>
   ${banners}
 
   <div class="verdict ${r.verdict}">
@@ -223,6 +282,8 @@ footer{margin-top:40px;font-size:.88rem;color:var(--muted);border-top:1px solid 
     <div><b>${r.totals.skip}</b><span>${esc(t.counts.skip)}</span></div>
   </div>
   <p class="legend">${esc(t.basisHelp)}</p>
+
+  ${progressHtml}
 
   ${r.fixFirst.length ? `<h2>${esc(t.fixFirst)}</h2><ol class="first">${r.fixFirst.map((f) => `<li><b>${esc(f.title)}</b> <span class="chip tier">${esc(t.tiers[f.tier])}</span><br>${esc(f.fix)}${f.evidence.length ? `<br><span class="muted">${esc(f.evidence[0])}</span>` : ''}</li>`).join('')}</ol>` : ''}
 

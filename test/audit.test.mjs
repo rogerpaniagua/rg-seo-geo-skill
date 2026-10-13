@@ -377,3 +377,36 @@ test('sitemap limit is per file: an index of several files totalling >50k URLs i
   }, { maxPages: 1 });
   assert.equal(status(r, 'crawl.sitemap-limits'), 'pass', JSON.stringify(r.find((x) => x.id === 'crawl.sitemap-limits')));
 });
+
+// ---- site health: broken and redirected internal links ----
+test('broken internal links (404/410) fail; redirected links warn; blocked links are not evaluated', async () => {
+  const links = ['/ok', '/gone', '/missing', '/redir', '/boom', '/blocked'].map((p) => `<a href="${p}">${p}</a>`).join('');
+  const { r } = await auditPages((req, res) => {
+    const u = req.url;
+    if (u === '/') { res.setHeader('content-type', 'text/html'); return res.end(html('', `<h1>Home</h1><p>${'word '.repeat(120)}</p>${links}`)); }
+    if (u === '/ok') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    if (u === '/gone') { res.statusCode = 410; return res.end(); }
+    if (u === '/redir') { res.statusCode = 301; res.setHeader('location', '/ok'); return res.end(); }
+    if (u === '/boom') { res.statusCode = 500; return res.end(); }
+    if (u === '/blocked') { res.statusCode = 403; return res.end(); }
+    res.statusCode = 404; res.end('nf');
+  }, { maxPages: 1 });
+  const broken = r.find((x) => x.id === 'health.broken-links');
+  assert.equal(broken.status, 'fail');
+  assert.match(broken.evidence.join(' '), /\/gone/);
+  assert.match(broken.evidence.join(' '), /\/missing/);
+  assert.doesNotMatch(broken.evidence.join(' '), /\/ok\b|\/blocked/);
+  assert.equal(status(r, 'health.redirected-links'), 'warn');
+  assert.match(r.find((x) => x.id === 'health.redirected-links').evidence.join(' '), /\/redir/);
+});
+
+test('healthy internal links pass', async () => {
+  const { r } = await auditPages((req, res) => {
+    res.setHeader('content-type', 'text/html');
+    if (req.url === '/' ) return res.end(html('', `<h1>Home</h1><p>${'word '.repeat(120)}</p><a href="/a">a</a><a href="/b#frag">b</a>`));
+    if (req.url === '/a' || req.url === '/b') return res.end(html());
+    res.statusCode = 404; res.end('nf');
+  }, { maxPages: 1 });
+  assert.equal(status(r, 'health.broken-links'), 'pass');
+  assert.equal(status(r, 'health.redirected-links'), 'pass');
+});

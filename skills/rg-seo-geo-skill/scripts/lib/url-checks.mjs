@@ -3,6 +3,7 @@
 import { fetchUrl } from './net.mjs';
 import { parseHtml, parseRobots, robotsAllows, parseSitemap, imageSize } from './html.mjs';
 import { detectStack, looksLikeClientShell } from './stack.mjs';
+import { findMixedContent, imageDimensionIssues, trustSignals } from './health.mjs';
 import net from 'node:net';
 
 const SEARCH_BOTS = ['OAI-SearchBot', 'ChatGPT-User', 'PerplexityBot', 'Claude-SearchBot', 'Claude-User', 'Googlebot', 'Bingbot'];
@@ -292,6 +293,9 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   const home = pages[0];
   if (home.parsed) homeChecks(home, pages, sitemapUrls, c, robots, robotsOk);
 
+  // ---- 5b. Site health: sample internal links from the audited pages and check their status ----
+  await checkInternalLinks(pages, finalUrl, net_, c);
+
   // ---- 6. Social images ----
   const imgUrls = [...new Set(pages.filter((p) => p.parsed && p.parsed.og['og:image']).map((p) => new URL(p.parsed.og['og:image'], p.url).toString()))].slice(0, 4);
   if (!imgUrls.length) {
@@ -337,11 +341,12 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   }
   const baseline = first.status;
   const blockedUas = [];
-  for (const [name, ua] of Object.entries(BOT_UAS)) {
+  for (const [name, ua] of Object.entries(opts.localBuild ? {} : BOT_UAS)) {
     const r = await fetchUrl(first.finalUrl, { ...net_, ua, maxBytes: 200_000 });
     if (baseline === 200 && [401, 403, 429, 503].includes(r.status)) blockedUas.push(`${name}→${r.status}`);
   }
-  c.add('geo.bot-access', blockedUas.length ? 'warn' : 'pass',
+  if (opts.localBuild) c.add('geo.bot-access', 'skip', 'a local build has no CDN/WAF; check bot access on the deployed site');
+  else c.add('geo.bot-access', blockedUas.length ? 'warn' : 'pass',
     blockedUas.length ? `${blockedUas.join(', ')} while a normal browser UA gets 200. Could be WAF impersonation protection (these requests come from a non-official IP); confirm in CDN logs.` : 'AI crawler user-agents receive the same 200 as browsers');
   const llms = await fetchUrl(`${origin}/llms.txt`, { ...net_, maxBytes: 200_000 });
   const hasLlms = llms.status === 200 && !/<html/i.test(llms.body.slice(0, 300));
@@ -350,7 +355,7 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   // ---- 9. Technology and JavaScript dependence (context for the report; no check depends on it) ----
   const notes = [];
   if (home.parsed) {
-    if (looksLikeClientShell(first.body, home.parsed.wordCount)) notes.push('client-shell');
+    if (looksLikeClientShell(home.parsed)) notes.push('client-shell');
   }
   const stack = detectStack(first.body, first.headers, home.parsed ? home.parsed.metaMap : {});
 
@@ -409,7 +414,7 @@ function pageChecks(p, scope, c) {
 
   // Content
   const wc = d.wordCount;
-  const shell = looksLikeClientShell(res.body, wc);
+  const shell = looksLikeClientShell(d);
   c.add('content.server-rendered', wc >= 100 ? 'pass' : shell ? 'fail' : 'warn',
     `${wc} words in the initial HTML${shell ? ' and an empty app container: content is likely added by JavaScript' : wc < 100 ? ' (short page)' : ''}`, scope);
   const imgs = d.images.filter((i) => !(i.src || '').startsWith('data:'));
@@ -423,6 +428,14 @@ function pageChecks(p, scope, c) {
   const skips = [];
   for (let i = 1; i < d.headings.length; i++) if (d.headings[i].level > d.headings[i - 1].level + 1) skips.push(`h${d.headings[i - 1].level}→h${d.headings[i].level}`);
   c.add('content.headings', skips.length ? 'warn' : 'pass', skips.length ? `skips: ${[...new Set(skips)].join(', ')}` : 'ok', scope);
+
+  // site health: mixed content and image dimensions
+  if (new URL(pageUrl).protocol === 'https:') {
+    const mixed = findMixedContent(d.resources, pageUrl);
+    c.add('health.mixed-content', mixed.length ? 'fail' : 'pass', mixed.length ? `${mixed.length} http:// resource(s): ${mixed.slice(0, 3).map((m) => `${m.tag} ${m.url}`).join(', ')}` : 'no http:// subresources', scope);
+  } else c.add('health.mixed-content', 'skip', 'page is not served over https (local build or plain-http site): check it again on the deployed site', scope);
+  const dim = imageDimensionIssues(d.images);
+  if (dim.total) c.add('health.img-dimensions', dim.missing === 0 ? 'pass' : dim.missing / dim.total > 0.3 ? 'warn' : 'pass', `${dim.missing}/${dim.total} images without width and height`, scope);
 
   // hreflang
   if (!d.hreflang.length) c.add('content.hreflang', 'skip', 'not used', scope);
@@ -489,6 +502,11 @@ function homeChecks(home, pages, sitemapUrls, c, robots, robotsOk) {
     } else c.add('geo.entity', 'skip', 'no entity node');
   }
 
+  // who is behind the site
+  const trust = trustSignals(d.anchors);
+  const missingTrust = ['about', 'contact', 'privacy'].filter((k) => !trust[k]);
+  c.add('geo.trust-pages', missingTrust.length === 0 ? 'pass' : 'warn', missingTrust.length ? `no link to: ${missingTrust.join(', ')}` : 'about, contact and privacy are linked');
+
   // Internal links present on the homepage but missing from the sitemap
   if (sitemapUrls.length) {
     const inSitemap = new Set(sitemapUrls.map(norm));
@@ -506,4 +524,60 @@ function homeChecks(home, pages, sitemapUrls, c, robots, robotsOk) {
     const missing = [...linked].filter((u) => !inSitemap.has(u));
     c.add('crawl.sitemap-has-page', missing.length ? 'warn' : 'pass', missing.length ? `${missing.length} linked page(s) not in sitemap: ${missing.slice(0, 5).map(pathOf).join(', ')}` : 'all internal links on the homepage are in the sitemap');
   } else c.add('crawl.sitemap-has-page', 'skip', 'no sitemap');
+}
+
+/**
+ * Sample internal links (same host) from the audited pages and check them with HEAD (GET fallback),
+ * without following redirects, so 404/410 (broken) and 3xx (redirected) can be told apart.
+ * Pages already fetched are skipped. Links the server refuses (401/403/429) are not evaluated.
+ */
+async function checkInternalLinks(pages, finalUrl, net_, c) {
+  const MAX = 40;
+  const fetched = new Set(pages.map((p) => norm(p.url)));
+  const queues = [];
+  for (const p of pages) {
+    if (!p.parsed) continue;
+    const seen = new Set();
+    const q = [];
+    for (const a of p.parsed.anchors) {
+      if (!a.href || /^(#|javascript:|mailto:|tel:|data:)/i.test(a.href)) continue;
+      let u;
+      try { u = new URL(a.href, p.res.finalUrl); } catch { continue; }
+      if (!/^https?:$/.test(u.protocol) || u.hostname !== finalUrl.hostname) continue;
+      u.hash = '';
+      const key = norm(u.toString());
+      if (fetched.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      q.push({ url: u.toString(), from: pathOf(p.url) || '/' });
+    }
+    queues.push(q);
+  }
+  // round-robin across pages so one link-heavy page cannot use the whole budget
+  const picked = [];
+  const seenAll = new Set();
+  while (picked.length < MAX && queues.some((q) => q.length)) {
+    for (const q of queues) {
+      const next = q.shift();
+      if (next && picked.length < MAX && !seenAll.has(norm(next.url))) { seenAll.add(norm(next.url)); picked.push(next); }
+    }
+  }
+  if (!picked.length) { c.add('health.broken-links', 'skip', 'no internal links to check'); c.add('health.redirected-links', 'skip', 'no internal links to check'); return; }
+
+  const results = await pool(picked, 3, async (l) => {
+    let r = await fetchUrl(l.url, { ...net_, method: 'HEAD', follow: false, timeout: 8000, maxBytes: 50_000 });
+    if (r.status === 405 || r.status === 501 || r.status === 400 || r.error) r = await fetchUrl(l.url, { ...net_, follow: false, timeout: 8000, maxBytes: 50_000 });
+    return { ...l, status: r.status, error: r.error };
+  });
+  const where = (r) => `${pathOf(r.url) || '/'} (linked from ${r.from})`;
+  const broken = results.filter((r) => r.status === 404 || r.status === 410 || (r.error && !r.status));
+  const serverErr = results.filter((r) => r.status >= 500 && r.status < 600 && r.status !== 503);
+  const redirected = results.filter((r) => r.status >= 300 && r.status < 400);
+  const refused = results.filter((r) => [401, 403, 429, 503].includes(r.status));
+  const checked = results.length - refused.length;
+  c.add('health.broken-links', broken.length ? 'fail' : serverErr.length ? 'warn' : checked ? 'pass' : 'skip',
+    broken.length ? broken.slice(0, 6).map((r) => `${r.status || r.error}: ${where(r)}`).join(' | ')
+      : serverErr.length ? serverErr.slice(0, 6).map((r) => `${r.status}: ${where(r)}`).join(' | ')
+        : `${checked} sampled link(s) OK${refused.length ? `; ${refused.length} refused automated access (not evaluated)` : ''}`);
+  c.add('health.redirected-links', redirected.length ? 'warn' : checked ? 'pass' : 'skip',
+    redirected.length ? redirected.slice(0, 6).map((r) => `${r.status}: ${where(r)}`).join(' | ') : 'no redirected internal links in the sample');
 }

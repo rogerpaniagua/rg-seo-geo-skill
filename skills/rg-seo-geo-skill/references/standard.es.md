@@ -79,6 +79,15 @@ Todos los checks que ejecuta la auditoría, en un solo lugar. Este archivo se ge
 | Consejo | Los niveles de encabezado no saltan (h1 → h2 → h3) | Un esquema limpio ayuda a accesibilidad y análisis de contenido. | Corrige el orden de encabezados. | Heurística | [link](https://developers.google.com/search/docs/fundamentals/seo-starter-guide) |
 | Importante | hreflang (si se usa) se autorreferencia y está bien formado | Un hreflang mal hecho hace que Google ignore el mapeo de idioma/región. | Incluye autorreferencia y x-default. | Oficial | [link](https://developers.google.com/search/docs/specialty/international/localized-versions) |
 
+### Salud del sitio
+
+| Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
+|---|---|---|---|---|---|
+| Importante | Los enlaces internos llevan a páginas que funcionan (sin 404 / 410 / errores de servidor) | Los enlaces rotos desperdician rastreo, frustran a los usuarios y debilitan las páginas a las que apuntan. Solo se revisa una muestra de enlaces de las páginas auditadas. | Corrige o quita los enlaces rotos, o redirige la URL antigua a su reemplazo. | Medido | [link](https://developers.google.com/search/docs/crawling-indexing/http-network-errors) |
+| Consejo | Los enlaces internos apuntan directo a la URL final (sin redirección) | Cada redirección añade latencia y diluye señales. Enlazar a la URL final es más limpio. | Actualiza el enlace al destino de la redirección. | Medido | [link](https://developers.google.com/search/docs/crawling-indexing/301-redirects) |
+| Importante | Las páginas HTTPS no cargan recursos por http:// (contenido mixto) | Los navegadores bloquean o advierten sobre scripts, estilos, imágenes y frames http:// en páginas https, lo que rompe la página y su seguridad. | Carga todos los recursos por https:// (o con rutas relativas). | Oficial | [link](https://web.dev/articles/what-is-mixed-content) |
+| Consejo | Las imágenes declaran width y height (evita saltos de diseño) | Sin dimensiones el navegador no puede reservar espacio, y el contenido salta al cargar las imágenes (Cumulative Layout Shift). | Agrega los atributos width y height (next/image lo hace por ti). | Oficial | [link](https://web.dev/articles/optimize-cls) |
+
 ### Búsqueda con IA (GEO)
 
 | Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
@@ -89,6 +98,7 @@ Todos los checks que ejecuta la auditoría, en un solo lugar. Este archivo se ge
 | Consejo | La entidad se enlaza a perfiles externos (sameAs ≥ 2) | Una identidad consistente en la web ayuda a desambiguar quién eres. | Agrega sameAs a perfiles oficiales. | Heurística | [link](https://developers.google.com/search/docs/appearance/structured-data/organization) |
 | Consejo | Las páginas tipo artículo muestran autor y fecha | La guía de contenido útil de Google recomienda autoría y fechas claras. | Muestra autor y fechas; agrega author, datePublished, dateModified al JSON-LD. | Oficial | [link](https://developers.google.com/search/docs/fundamentals/creating-helpful-content) |
 | Consejo | El contenido tiene estructura extraíble (listas, tablas, preguntas, datos concretos) | Estudios sobre citas de IA hallan que las páginas citadas son modulares y ricas en definiciones, cifras, comparaciones y pasos. El tamaño del efecto no está establecido. | Agrega respuestas directas, pasos numerados, tablas comparativas y cifras específicas donde aplique. | Heurística | [link](https://arxiv.org/pdf/2604.25707) |
+| Consejo | La home enlaza a las páginas Acerca de, Contacto y Privacidad | La guía de contenido útil de Google pregunta "quién está detrás de este contenido"; páginas visibles de acerca de/contacto/privacidad son la respuesta habitual, para personas y para sistemas que evalúan una fuente. Se detecta solo por la ruta de los enlaces. | Agrega y enlaza páginas de Acerca de, Contacto y Privacidad desde el encabezado o el pie. | Heurística | [link](https://developers.google.com/search/docs/fundamentals/creating-helpful-content) |
 | Consejo | llms.txt (solo informativo) | Google indica que llms.txt no tiene efecto en Search ni AI Overviews y estudios independientes no hallaron correlación con citas. Inofensivo mantenerlo. Nunca es prioridad. | Opcional. | Heurística | [link](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide) |
 
 ## Código fuente (Next.js)
