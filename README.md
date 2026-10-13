@@ -9,7 +9,7 @@ A [Claude Code](https://claude.com/claude-code) skill and zero-dependency CLI th
 Most SEO/GEO tools either score pages with an LLM (not reproducible) or repeat unproven advice. This one is built on three rules:
 
 1. **Deterministic.** It fetches your pages like a crawler and reads your source files. Same input, same output.
-2. **Transparent standard.** All 66 checks live in [`catalog.mjs`](skills/rg-seo-geo-skill/scripts/lib/catalog.mjs), each with a tier (blocker / important / advice), a basis (**official** / **measured** / **heuristic**) and a source link. [Read the standard](skills/rg-seo-geo-skill/references/standard.en.md).
+2. **Transparent standard.** All 82 checks live in [`catalog.mjs`](skills/rg-seo-geo-skill/scripts/lib/catalog.mjs), each with a tier (blocker / important / advice), a basis (**official** / **measured** / **heuristic**) and a source link. [Read the standard](skills/rg-seo-geo-skill/references/standard.en.md).
 3. **Honest about GEO.** Heuristics are labelled and can never block a launch. llms.txt is informational: Google says it has no effect on Search.
 
 There is deliberately **no composite 0–100 score**. The verdict comes from blockers and important failures.
@@ -22,7 +22,7 @@ Requires Node 18+. No install, no dependencies.
 # any published site
 node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://example.com --lang en
 
-# a Next.js project + its live URL
+# a project folder (Next.js, Astro, Nuxt, SvelteKit, Vite SPA, Jekyll, Hugo, Laravel, Django, WordPress...) + its live URL
 node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://example.com --src ../my-site --out ./report
 
 # before deploying, any stack: audit the compiled output (dist, out, public, _site, build...)
@@ -56,7 +56,7 @@ Then ask Claude: *"audit the SEO and GEO of https://… and the project in ~/cod
 | Content | server-rendered text, alt text, crawlable links, hreflang |
 | Site health | broken and redirected internal links, mixed content, image dimensions |
 | AI search (GEO) | AI crawler access in robots.txt and at the server, snippet controls, entity links, authorship, extractable structure |
-| Next.js source | `metadataBase`, `generateMetadata`, canonical inheritance, `sitemap.ts` coverage, `opengraph-image`, Server Components |
+| Source code | **Next.js** (deep), **Astro**, **Nuxt**, **SvelteKit**, **Vite/React/Vue/Angular single-page apps** (deep), and a heuristic pass for **Jekyll, Hugo, Eleventy, Laravel, Django, Rails, WordPress themes**, plain PHP/HTML. See [source-fixes](skills/rg-seo-geo-skill/references/source-fixes.md) |
 
 ## What it does not do
 
@@ -84,6 +84,7 @@ Known limits: `--build` serves the compiled files only. Hosting rules (rewrites,
 ```bash
 npm test          # unit + integration tests (local fixture servers, Next.js fixtures)
 npm run corpus    # audit the real-world corpus and list the most frequent findings (find false positives)
+./scripts/clone-source-corpus.sh ./source-corpus && npm run source-corpus -- ./source-corpus   # review 20 real open-source projects of every framework
 npm run docs      # regenerate references/standard.*.md from the catalog
 ```
 

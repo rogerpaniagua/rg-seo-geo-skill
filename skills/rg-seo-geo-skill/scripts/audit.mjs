@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Collector, sanitize } from './lib/collector.mjs';
 import { runUrlAudit } from './lib/url-checks.mjs';
-import { runNextAudit } from './lib/next-checks.mjs';
+import { runSourceAudit } from './lib/source/index.mjs';
 import { serveStatic } from './lib/static-server.mjs';
 import { buildReport, toHtml, toMarkdown } from './lib/report.mjs';
 
@@ -24,7 +24,8 @@ Usage:
 
 Options:
   --url <url>          Published site (or local dev server with --allow-local). Works for any stack.
-  --src <dir>          Source code to inspect (Next.js App Router supported).
+  --src <dir>          Source code to inspect: Next.js, Astro, Nuxt, SvelteKit, Vite/React/Vue SPAs, Jekyll, Hugo,
+                       Laravel, Django, Rails, WordPress themes... (monorepos: the app is found automatically).
   --build <dir>        Compiled site folder (dist, out, public, _site, build...). Served locally and audited before you deploy.
                        Works for any tool that produces static HTML. Cannot be combined with --url.
   --out <dir>          Output directory (default: ./seo-geo-report)
@@ -76,7 +77,7 @@ async function main() {
   const meta = { date: new Date().toISOString().slice(0, 10), tool: 'rg-seo-geo-skill 0.1.0' };
 
   if (o.src) {
-    const r = runNextAudit({ src: o.src }, c, log);
+    const r = runSourceAudit({ src: o.src }, c, log);
     Object.assign(meta, r.meta);
     if (r.skipped) log(r.meta.note);
   }

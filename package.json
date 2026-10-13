@@ -14,7 +14,8 @@
     "test": "node --test test/",
     "audit": "node skills/rg-seo-geo-skill/scripts/audit.mjs",
     "docs": "node scripts/gen-standard.mjs",
-    "corpus": "node scripts/corpus.mjs"
+    "corpus": "node scripts/corpus.mjs",
+    "source-corpus": "node scripts/source-corpus.mjs"
   },
   "keywords": [
     "seo",

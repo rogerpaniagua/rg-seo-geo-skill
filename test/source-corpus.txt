@@ -1,0 +1,23 @@
+# Real open-source projects used to calibrate source-code review (see scripts/clone-source-corpus.sh).
+# name | github repo | sparse path (optional) | sub-folder to audit (optional)
+astro-build-site|withastro/astro.build||
+astro-blog-example|withastro/astro|examples/blog|examples/blog
+nuxt-com|nuxt/nuxt.com||
+svelte-realworld|sveltejs/realworld||
+svelte-dev|sveltejs/svelte.dev||apps/svelte.dev
+react-cra-realworld|gothinkster/react-redux-realworld-example-app||
+vue-realworld|gothinkster/vue-realworld-example-app||
+angular-realworld|gothinkster/angular-realworld-example-app||
+jekyll-docs|jekyll/jekyll|docs|docs
+hugo-docs|gohugoio/hugoDocs||
+hugo-papermod|adityatelange/hugo-PaperMod||
+eleventy-site|11ty/11ty-website||
+django-site|django/djangoproject.com||
+bakerydemo|wagtail/bakerydemo||
+laravel-skeleton|laravel/laravel||
+laravel-koel|koel/koel||
+rails-rubygems|rubygems/rubygems.org||
+wp-twentytwentyfour|WordPress/twentytwentyfour||
+wp-twentytwenty|WordPress/twentytwenty||
+wp-underscores|Automattic/_s||
+docusaurus-site|facebook/docusaurus|website|website

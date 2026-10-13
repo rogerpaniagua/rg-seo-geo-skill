@@ -9,7 +9,7 @@ Una skill de [Claude Code](https://claude.com/claude-code) y CLI sin dependencia
 La mayoría de herramientas califican páginas con un LLM (no reproducible) o repiten consejos sin evidencia. Esta se basa en tres reglas:
 
 1. **Determinista.** Lee tus páginas como un rastreador y tus archivos de código. Misma entrada, misma salida.
-2. **Estándar transparente.** Los 66 checks viven en [`catalog.mjs`](skills/rg-seo-geo-skill/scripts/lib/catalog.mjs), cada uno con nivel (bloqueante / importante / consejo), base (**oficial** / **medido** / **heurística**) y enlace a la fuente. [Lee el estándar](skills/rg-seo-geo-skill/references/standard.es.md).
+2. **Estándar transparente.** Los 82 checks viven en [`catalog.mjs`](skills/rg-seo-geo-skill/scripts/lib/catalog.mjs), cada uno con nivel (bloqueante / importante / consejo), base (**oficial** / **medido** / **heurística**) y enlace a la fuente. [Lee el estándar](skills/rg-seo-geo-skill/references/standard.es.md).
 3. **Honesta con GEO.** Las heurísticas están etiquetadas y nunca bloquean un lanzamiento. llms.txt es solo informativo: Google dice que no tiene efecto en Search.
 
 A propósito **no hay un puntaje 0–100**. El veredicto sale de bloqueantes y fallas importantes.
@@ -22,7 +22,7 @@ Requiere Node 18+. Sin instalar nada.
 # cualquier sitio publicado
 node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com
 
-# un proyecto Next.js + su URL en vivo
+# una carpeta de proyecto (Next.js, Astro, Nuxt, SvelteKit, SPA con Vite, Jekyll, Hugo, Laravel, Django, WordPress...) + su URL en vivo
 node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com --src ../mi-sitio --out ./reporte
 
 # antes de publicar, cualquier tecnología: audita la carpeta compilada (dist, out, public, _site, build...)
@@ -71,6 +71,7 @@ Límite conocido: `--build` sirve solo los archivos compilados. Las reglas del h
 ```bash
 npm test        # pruebas unitarias e integración
 npm run corpus  # audita el corpus real y lista los hallazgos más frecuentes (detecta falsos positivos)
+./scripts/clone-source-corpus.sh ./source-corpus && npm run source-corpus -- ./source-corpus   # revisa 20 proyectos reales de código abierto de cada framework
 npm run docs    # regenera references/standard.*.md desde el catálogo
 ```
 
