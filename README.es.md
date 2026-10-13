@@ -75,6 +75,10 @@ npm run corpus  # audita el corpus real y lista los hallazgos más frecuentes (d
 npm run docs    # regenera references/standard.*.md desde el catálogo
 ```
 
+## Estado
+
+v0.1, usada en producción por su autor. El estándar sigue la documentación de Google Search Central y de cada framework, y GEO (visibilidad en búsqueda con IA) es un campo joven con poca práctica comprobada: las heurísticas están marcadas como tales. Es un proyecto independiente, sin afiliación con Google, OpenAI, Anthropic ni ningún framework mencionado. Contribuciones: [CONTRIBUTING.md](CONTRIBUTING.md). Vulnerabilidades: [SECURITY.md](SECURITY.md).
+
 ## Licencia
 
 MIT

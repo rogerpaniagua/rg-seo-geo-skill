@@ -25,5 +25,13 @@
     "skill",
     "nextjs",
     "audit"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rogerpaniagua/rg-seo-geo-skill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rogerpaniagua/rg-seo-geo-skill/issues"
+  },
+  "homepage": "https://github.com/rogerpaniagua/rg-seo-geo-skill#readme"
 }

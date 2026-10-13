@@ -90,6 +90,10 @@ npm run docs      # regenerate references/standard.*.md from the catalog
 
 To add a check: add it to `catalog.mjs` (bilingual text, tier, basis, source), emit it from `url-checks.mjs` or `next-checks.mjs`, add a test, run `npm run docs`. Heuristic checks must not be blockers (enforced by a test).
 
+## Status
+
+v0.1, used in production by its author. The standard follows Google Search Central and framework documentation, and GEO (AI-search visibility) is a young field with little proven practice: heuristics are labelled as such. This is an independent project, not affiliated with Google, OpenAI, Anthropic or any framework mentioned. Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). Vulnerabilities: [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT
