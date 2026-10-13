@@ -1,0 +1,115 @@
+# El estándar SEO y GEO
+
+Todos los checks que ejecuta la auditoría, en un solo lugar. Este archivo se genera desde `scripts/lib/catalog.mjs`: edita el catálogo y corre `npm run docs`.
+
+## Niveles
+
+- **Bloqueante**: rompe la indexación o el compartir. Corregir antes del lanzamiento. Solo reglas medibles o documentadas oficialmente pueden ser bloqueantes.
+- **Importante**: reduce visibilidad o calidad. Corregir pronto.
+- **Consejo**: pulido y buenas prácticas.
+
+## Base (cuánto confiar en una regla)
+
+- **Oficial**: está en la documentación de Google Search Central o Next.js (fuente enlazada).
+- **Medido**: un hecho verificable de tu página o código (un código de estado, una etiqueta).
+- **Heurística**: práctica de la comunidad sin efecto oficial ni probado. Nunca es bloqueante ni se presenta como requisito.
+
+## Sitio publicado
+
+### Rastreo e indexación
+
+| Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
+|---|---|---|---|---|---|
+| Bloqueante | La página responde con HTTP 200 | Las páginas con error no se indexan. | Corrige el error del servidor o la redirección rota. | Medido | [link](https://developers.google.com/search/docs/crawling-indexing/http-network-errors) |
+| Bloqueante | El sitio usa HTTPS y HTTP redirige a HTTPS | HTTPS es requisito base; versiones mezcladas dividen señales. | Fuerza HTTPS con una redirección permanente. | Oficial | [link](https://developers.google.com/search/docs/essentials/technical) |
+| Importante | www y sin www resuelven a un solo host | Dos hosts activos duplican cada URL. | Redirige un host al otro con 301/308. | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls) |
+| Consejo | La home llega a su URL final en máximo 2 redirecciones | Cadenas largas desperdician rastreo y ralentizan. | Apunta enlaces y redirecciones directo a la URL final. | Medido | [link](https://developers.google.com/search/docs/crawling-indexing/301-redirects) |
+| Bloqueante | La página auditada no está bloqueada para indexación (noindex) | Un noindex (meta o cabecera) saca la página de Google. | Quita noindex en producción. Déjalo solo en staging. | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/block-indexing) |
+| Importante | Las páginas del sitemap son indexables (sin noindex) | El sitemap dice "indexa esto" y la página dice "no indexar": señales contradictorias. Si el noindex es intencional, quita la URL del sitemap; si no, quita el noindex. | Haz que sitemap y directivas de robots coincidan. | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/block-indexing) |
+| Importante | robots.txt existe y es accesible | Los rastreadores lo buscan primero y anuncia el sitemap. | Sirve /robots.txt (Next.js: app/robots.ts). | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/robots/intro) |
+| Bloqueante | robots.txt no bloquea todo el sitio a todos los bots | "Disallow: /" para User-agent * detiene todo el rastreo. | Quita el Disallow global en producción. | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/robots/create-robots-txt) |
+| Importante | robots.txt referencia el sitemap | Ayuda a cualquier rastreador a descubrir tus URLs. | Agrega "Sitemap: https://tu-dominio/sitemap.xml". | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap) |
+| Importante | Existe un sitemap XML válido | El sitemap es la pista principal para descubrir URLs nuevas. Google indica que un sitio pequeño y bien enlazado puede no necesitarlo estrictamente, por eso su ausencia es una advertencia en sitios pequeños y una falla en los grandes. | Publica un sitemap.xml válido (Next.js: app/sitemap.ts). | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview) |
+| Importante | Las URLs del sitemap son absolutas, del mismo host y devuelven 200 | URLs con redirección o error en el sitemap restan confianza. | Lista solo URLs finales, canónicas e indexables. | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap) |
+| Consejo | Los lastmod del sitemap son significativos (no todos iguales) | Google solo usa lastmod si es consistentemente preciso. La fecha de build en todo lo invalida. | Usa la fecha real de modificación por página, o quita lastmod. | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap) |
+| Consejo | El sitemap no supera 50.000 URLs / 50 MB | Archivos mayores se ignoran; divide con un índice. | Divide en varios sitemaps (Next.js: generateSitemaps). | Oficial | [link](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/sitemap) |
+| Consejo | El sitemap cubre las páginas enlazadas internamente | Páginas internas ausentes del sitemap se descubren más lento. | Agrega al sitemap las URLs indexables que faltan. | Medido | [link](https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview) |
+| Importante | Las URLs inexistentes devuelven un 404 real | Una página "no encontrada" con 200 es un soft 404 y contamina el índice. | Devuelve estado 404 (Next.js: not-found.tsx / notFound()). | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/http-network-errors#soft-404-errors) |
+| Importante | La URL canónica está declarada, es absoluta y apunta a sí misma | Evita duplicados por parámetros, barra final o host. | Agrega <link rel="canonical"> con la URL absoluta (Next.js: alternates.canonical). | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls) |
+
+### Metadatos de página
+
+| Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
+|---|---|---|---|---|---|
+| Bloqueante | Cada página tiene <title> | El título es la fuente principal del enlace de título en resultados. | Define un título descriptivo y único por página. | Oficial | [link](https://developers.google.com/search/docs/appearance/title-link) |
+| Consejo | La longitud del título es razonable (aprox. 15–60 caracteres) | Google no tiene límite fijo; los muy largos se truncan o reescriben. | Pon las palabras clave primero y sé conciso. | Heurística | [link](https://developers.google.com/search/docs/appearance/title-link) |
+| Importante | Los títulos son únicos entre páginas | Títulos idénticos vuelven las páginas indistinguibles. | Da a cada página su propio título (Next.js: title.template + título por página). | Oficial | [link](https://developers.google.com/search/docs/appearance/title-link) |
+| Importante | Cada página tiene meta description | Google la usa con frecuencia como fragmento del resultado. | Escribe un resumen único de 70–160 caracteres por página. | Oficial | [link](https://developers.google.com/search/docs/appearance/snippet) |
+| Consejo | Las descripciones son únicas entre páginas | Descripciones duplicadas no aportan fragmento específico. | Escribe descripciones específicas por página. | Oficial | [link](https://developers.google.com/search/docs/appearance/snippet) |
+| Importante | Cada página tiene exactamente un <h1> | Un solo H1 declara el tema para usuarios, accesibilidad y parsers. | Usa un H1 que refleje la intención de la página. | Medido | [link](https://developers.google.com/search/docs/fundamentals/seo-starter-guide) |
+| Importante | <html> declara el atributo lang | Ayuda a detección de idioma, accesibilidad y traducciones. | Define <html lang="es"> (o el código correcto). | Oficial | [link](https://developers.google.com/search/docs/specialty/international/localized-versions) |
+| Bloqueante | Existe la meta viewport (indexación mobile-first) | Google indexa la versión móvil; sin viewport no es mobile-friendly. | Agrega width=device-width, initial-scale=1 (Next.js lo añade por defecto). | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/mobile/mobile-sites-mobile-first-indexing) |
+
+### Compartir en redes (Open Graph)
+
+| Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
+|---|---|---|---|---|---|
+| Importante | Open Graph básico: og:title, og:description, og:url, og:type | Controla cómo se ve el enlace en LinkedIn, WhatsApp, Slack, Facebook y más. | Define openGraph en la metadata de Next.js. | Medido | [link](https://nextjs.org/docs/app/getting-started/metadata-and-og-images) |
+| Importante | og:image existe, es absoluta y carga (HTTP 200, tipo imagen) | Sin imagen accesible, el enlace compartido se ve vacío. | Agrega opengraph-image.(jpg\|png\|tsx) o metadata.openGraph.images y define metadataBase. | Medido | [link](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image) |
+| Consejo | og:image mide aprox. 1200×630 (1.91:1) y pesa menos de 5 MB | Es el tamaño de facto entre plataformas; otras proporciones se recortan. | Exporta la imagen a 1200×630 y comprímela. | Heurística | [link](https://nextjs.org/docs/app/getting-started/metadata-and-og-images) |
+| Consejo | twitter:card está declarada | Activa la tarjeta con imagen grande en X. | Define twitter.card = "summary_large_image". | Medido | [link](https://nextjs.org/docs/app/getting-started/metadata-and-og-images) |
+| Consejo | Favicon y apple-touch-icon están declarados | Google muestra el favicon en resultados. | Agrega app/icon.png y app/apple-icon.png (o metadata.icons). | Oficial | [link](https://developers.google.com/search/docs/appearance/favicon-in-search) |
+
+### Datos estructurados
+
+| Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
+|---|---|---|---|---|---|
+| Importante | La home tiene datos estructurados JSON-LD | Los datos estructurados dicen a las máquinas de qué trata la página y quién está detrás. | Agrega JSON-LD de Organization / Person / WebSite. | Oficial | [link](https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data) |
+| Importante | El JSON-LD se parsea y declara @context y @type | Un JSON-LD roto se ignora en silencio. | Valida en la Rich Results Test / validador de Schema.org. | Medido | [link](https://developers.google.com/search/docs/appearance/structured-data/sd-policies) |
+| Consejo | La home declara una entidad (Organization, Person, LocalBusiness o WebSite) | Identifica al dueño del sitio; alimenta paneles de conocimiento y respuestas de IA. | Agrega un nodo Organization o Person con name, url, logo/image. | Oficial | [link](https://developers.google.com/search/docs/appearance/structured-data/organization) |
+| Consejo | Los tipos de schema conocidos incluyen sus propiedades clave | Faltar propiedades requeridas deja el marcado sin elegibilidad. | Completa las propiedades indicadas en la evidencia. | Oficial | [link](https://developers.google.com/search/docs/appearance/structured-data/search-gallery) |
+
+### Contenido y enlaces
+
+| Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
+|---|---|---|---|---|---|
+| Importante | El contenido principal está en el HTML inicial (sin JavaScript) | Google ejecuta JavaScript pero puede diferirlo. Mediciones de terceros indican que la mayoría de rastreadores de IA no ejecuta JavaScript (no está documentado oficialmente), por lo que una página vacía antes de JavaScript puede ser invisible para ellos. | Renderiza el contenido en el servidor (Server Components, SSG). | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics) |
+| Importante | Las imágenes tienen texto alternativo | El alt se usa en búsqueda de imágenes y accesibilidad. | Agrega alt descriptivo (alt="" solo para decorativas). | Oficial | [link](https://developers.google.com/search/docs/appearance/google-images) |
+| Importante | Los enlaces internos son <a href> rastreables | Google solo sigue enlaces de <a> con href real. | Evita href="#", javascript: y navegación solo por click. | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/links-crawlable) |
+| Consejo | Los niveles de encabezado no saltan (h1 → h2 → h3) | Un esquema limpio ayuda a accesibilidad y análisis de contenido. | Corrige el orden de encabezados. | Heurística | [link](https://developers.google.com/search/docs/fundamentals/seo-starter-guide) |
+| Importante | hreflang (si se usa) se autorreferencia y está bien formado | Un hreflang mal hecho hace que Google ignore el mapeo de idioma/región. | Incluye autorreferencia y x-default. | Oficial | [link](https://developers.google.com/search/docs/specialty/international/localized-versions) |
+
+### Búsqueda con IA (GEO)
+
+| Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
+|---|---|---|---|---|---|
+| Importante | Los rastreadores de búsqueda con IA no están bloqueados en robots.txt | Los bots de búsqueda/respuesta (OAI-SearchBot, PerplexityBot, Claude-SearchBot…) deciden si te pueden citar. Bloquear bots de entrenamiento (GPTBot, Google-Extended, ClaudeBot) es otra decisión, legítima. | Permite los bots de búsqueda por los que quieres ser citado; decide los de entrenamiento como política. | Medido | [link](https://platform.openai.com/docs/bots) |
+| Importante | El servidor/CDN no bloquea user-agents de rastreadores de IA | Un WAF o protección anti-bots puede devolver 403 a rastreadores de IA aunque robots.txt los permita. | Permite los rastreadores de búsqueda de IA en tu CDN/WAF. | Medido | [link](https://platform.openai.com/docs/bots) |
+| Importante | Sin nosnippet / max-snippet:0 que limite el uso en funciones de IA | Google aplica los controles de fragmento también a AI Overviews y AI Mode. | Quita nosnippet salvo que sea una exclusión intencional. | Oficial | [link](https://developers.google.com/search/docs/appearance/ai-features) |
+| Consejo | La entidad se enlaza a perfiles externos (sameAs ≥ 2) | Una identidad consistente en la web ayuda a desambiguar quién eres. | Agrega sameAs a perfiles oficiales. | Heurística | [link](https://developers.google.com/search/docs/appearance/structured-data/organization) |
+| Consejo | Las páginas tipo artículo muestran autor y fecha | La guía de contenido útil de Google recomienda autoría y fechas claras. | Muestra autor y fechas; agrega author, datePublished, dateModified al JSON-LD. | Oficial | [link](https://developers.google.com/search/docs/fundamentals/creating-helpful-content) |
+| Consejo | El contenido tiene estructura extraíble (listas, tablas, preguntas, datos concretos) | Estudios sobre citas de IA hallan que las páginas citadas son modulares y ricas en definiciones, cifras, comparaciones y pasos. El tamaño del efecto no está establecido. | Agrega respuestas directas, pasos numerados, tablas comparativas y cifras específicas donde aplique. | Heurística | [link](https://arxiv.org/pdf/2604.25707) |
+| Consejo | llms.txt (solo informativo) | Google indica que llms.txt no tiene efecto en Search ni AI Overviews y estudios independientes no hallaron correlación con citas. Inofensivo mantenerlo. Nunca es prioridad. | Opcional. | Heurística | [link](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide) |
+
+## Código fuente (Next.js)
+
+### Implementación en Next.js
+
+| Nivel | Check | Por qué | Cómo corregir | Base | Fuente |
+|---|---|---|---|---|---|
+| Importante | metadataBase está definido en el layout raíz | Las URLs relativas de OG/canonical necesitan metadataBase para volverse absolutas. | Agrega metadataBase: new URL("https://tu-dominio") en app/layout. | Oficial | [link](https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase) |
+| Importante | La metadata raíz define title (idealmente con template) y description | Da a cada ruta un valor por defecto y un patrón de título consistente. | Usa title: { default, template: "%s \| Marca" } y una description. | Oficial | [link](https://nextjs.org/docs/app/getting-started/metadata-and-og-images) |
+| Importante | Existe metadata de Open Graph/Twitter o el archivo opengraph-image | Sin esto, los enlaces compartidos no tienen vista previa. | Agrega metadata openGraph + twitter o app/opengraph-image.*. | Oficial | [link](https://nextjs.org/docs/app/getting-started/metadata-and-og-images) |
+| Importante | El canonical se genera por página (alternates.canonical) | Un canonical único en el layout raíz apunta todas las páginas a la home. | Define alternates.canonical en cada página / generateMetadata (la ruta relativa funciona con metadataBase). | Oficial | [link](https://nextjs.org/docs/app/api-reference/functions/generate-metadata#alternates) |
+| Importante | Existe el archivo sitemap | Genera /sitemap.xml automáticamente. | Crea app/sitemap.ts. | Oficial | [link](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/sitemap) |
+| Importante | Existe el archivo robots | Genera /robots.txt automáticamente. | Crea app/robots.ts. | Oficial | [link](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/robots) |
+| Importante | Cada ruta estática aparece en el sitemap | Rutas ausentes de un sitemap escrito a mano se descubren tarde. | Agrega las rutas faltantes (o genera el sitemap desde la lista de rutas). | Medido | [link](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/sitemap) |
+| Consejo | El sitemap no pone new Date() como lastModified en todas las URLs | Google ignora lastmod si no es consistentemente preciso; new Date() cambia en cada build. | Usa fechas reales de contenido, o quita lastModified. | Oficial | [link](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap) |
+| Importante | metadataBase, sitemap y robots usan el mismo host | Mezclar www/sin www o dominios envía señales canónicas contradictorias. | Define la URL del sitio una vez (variable de entorno / constante) y reutilízala. | Medido | [link](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls) |
+| Importante | Las rutas dinámicas ([param]) definen generateMetadata | Si no, todas las páginas dinámicas comparten título y descripción. | Exporta generateMetadata en cada página dinámica. | Oficial | [link](https://nextjs.org/docs/app/getting-started/metadata-and-og-images#generated-metadata) |
+| Importante | Cada página (o su layout) define su propia metadata | Páginas sin título/descripción propios heredan los valores raíz y parecen duplicadas. | Exporta metadata o generateMetadata en cada página indexable. | Oficial | [link](https://nextjs.org/docs/app/getting-started/metadata-and-og-images) |
+| Importante | Las páginas son Server Components (sin "use client" a nivel de página) | metadata y generateMetadata solo funcionan en Server Components, así que una página cliente no puede definir su propia metadata; además envía más JavaScript. La home puede heredar metadata del layout, por eso ahí es solo una advertencia. | Mueve la interactividad a componentes hijos. | Oficial | [link](https://nextjs.org/docs/app/getting-started/metadata-and-og-images) |
+| Consejo | Los íconos están definidos (favicon / icon / apple-icon o metadata.icons) | El favicon se muestra en resultados y pestañas. | Agrega app/icon.png y app/apple-icon.png. | Oficial | [link](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/app-icons) |
+| Consejo | Se renderiza JSON-LD en la app | Los datos estructurados son la capa legible por máquinas. | Renderiza un <script type="application/ld+json"> en layout/páginas (escapa "<"). | Oficial | [link](https://nextjs.org/docs/app/guides/json-ld) |
+| Consejo | Se usa next/image en lugar de <img> crudo | Tamaño automático, formatos modernos y lazy loading ayudan a LCP y CLS. | Reemplaza <img> por <Image>. | Oficial | [link](https://nextjs.org/docs/app/api-reference/components/image) |
+| Consejo | Existe una página not-found personalizada | Devuelve un 404 real con navegación útil. | Crea app/not-found.tsx. | Oficial | [link](https://nextjs.org/docs/app/api-reference/file-conventions/not-found) |
