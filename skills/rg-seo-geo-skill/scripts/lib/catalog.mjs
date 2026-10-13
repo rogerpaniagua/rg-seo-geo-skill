@@ -310,8 +310,8 @@ export const CHECKS = [
   },
   {
     id: 'health.redirected-links', category: 'health', tier: 'advice', basis: 'measured', mode: 'url',
-    title: { en: 'Internal links point straight at the final URL (no redirect)', es: 'Los enlaces internos apuntan directo a la URL final (sin redirección)' },
-    why: { en: 'Every redirect adds latency and dilutes signals. Linking to the final URL is cleaner.', es: 'Cada redirección añade latencia y diluye señales. Enlazar a la URL final es más limpio.' },
+    title: { en: 'Internal links point straight at the final URL (no permanent redirect)', es: 'Los enlaces internos apuntan directo a la URL final (sin redirección permanente)' },
+    why: { en: 'A link that goes through a permanent redirect (301/308) is out of date: every visit adds latency and dilutes signals. Temporary redirects (302/307) and login/API endpoints are usually deliberate and are not reported.', es: 'Un enlace que pasa por una redirección permanente (301/308) está desactualizado: cada visita añade latencia y diluye señales. Las redirecciones temporales (302/307) y los endpoints de login/API suelen ser deliberados y no se reportan.' },
     fix: { en: 'Update the link to the redirect target.', es: 'Actualiza el enlace al destino de la redirección.' },
     source: `${G}/crawling-indexing/301-redirects`,
   },
@@ -325,8 +325,8 @@ export const CHECKS = [
   {
     id: 'health.img-dimensions', category: 'health', tier: 'advice', basis: 'official', mode: 'url',
     title: { en: 'Images declare width and height (prevents layout shift)', es: 'Las imágenes declaran width y height (evita saltos de diseño)' },
-    why: { en: 'Without dimensions the browser cannot reserve space, so content jumps as images load (Cumulative Layout Shift).', es: 'Sin dimensiones el navegador no puede reservar espacio, y el contenido salta al cargar las imágenes (Cumulative Layout Shift).' },
-    fix: { en: 'Add width and height attributes (next/image does it for you).', es: 'Agrega los atributos width y height (next/image lo hace por ti).' },
+    why: { en: 'Without dimensions the browser cannot reserve space, so content jumps as images load (Cumulative Layout Shift). Only the HTML attributes are inspected: a page that reserves the space with CSS (aspect-ratio, sized wrappers) is fine, so treat this as advice.', es: 'Sin dimensiones el navegador no puede reservar espacio, y el contenido salta al cargar las imágenes (Cumulative Layout Shift). Solo se inspeccionan los atributos HTML: una página que reserva el espacio con CSS (aspect-ratio, contenedores con tamaño) está bien, por eso es un consejo.' },
+    fix: { en: 'Add width and height attributes (next/image does it for you) or reserve the space with CSS aspect-ratio.', es: 'Agrega los atributos width y height (next/image lo hace por ti) o reserva el espacio con aspect-ratio en CSS.' },
     source: 'https://web.dev/articles/optimize-cls',
   },
 
@@ -375,9 +375,9 @@ export const CHECKS = [
   },
   {
     id: 'geo.trust-pages', category: 'geo', tier: 'advice', basis: 'heuristic', mode: 'url',
-    title: { en: 'Homepage links to About, Contact and Privacy pages', es: 'La home enlaza a las páginas Acerca de, Contacto y Privacidad' },
+    title: { en: 'Homepage links to at least one of About, Contact or Privacy', es: 'La home enlaza al menos a una de: Acerca de, Contacto o Privacidad' },
     why: { en: 'Google\'s helpful-content guidance asks "who is behind this content"; visible about/contact/privacy pages are the usual answer, for people and for systems judging a source. Detected from link paths only.', es: 'La guía de contenido útil de Google pregunta "quién está detrás de este contenido"; páginas visibles de acerca de/contacto/privacidad son la respuesta habitual, para personas y para sistemas que evalúan una fuente. Se detecta solo por la ruta de los enlaces.' },
-    fix: { en: 'Add and link About, Contact and Privacy pages from the header or footer.', es: 'Agrega y enlaza páginas de Acerca de, Contacto y Privacidad desde el encabezado o el pie.' },
+    fix: { en: 'Add and link About, Contact and Privacy pages (or sections, for one-page sites) from the header or footer.', es: 'Agrega y enlaza páginas de Acerca de, Contacto y Privacidad (o secciones, en sitios de una página) desde el encabezado o el pie.' },
     source: `${G}/fundamentals/creating-helpful-content`,
   },
   {

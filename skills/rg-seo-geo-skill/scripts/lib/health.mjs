@@ -16,10 +16,10 @@ export function imageDimensionIssues(images) {
 }
 
 const TRUST = {
-  about: /(^|[/_.-])(about|acerca|nosotros|quienes|quiénes|sobre|equipo|team|company|empresa)([/_.-]|$)/i,
-  contact: /(^|[/_.-])(contact|contacto|contactanos|contáctanos|contato)([/_.-]|$)/i,
-  privacy: /(^|[/_.-])(privacy|privacidad|privacidade|datenschutz|politica-de-privacidad|cookies?)([/_.-]|$)/i,
-  terms: /(^|[/_.-])(terms|terminos|términos|condiciones|conditions|legal|tos)([/_.-]|$)/i,
+  about: /(^|[/_.#-])(about|acerca|nosotros|quienes|quiénes|sobre|equipo|team|company|empresa)([/_.-]|$)/i,
+  contact: /(^|[/_.#-])(contact|contacto|contactanos|contáctanos|contato)([/_.-]|$)/i,
+  privacy: /(^|[/_.#-])(privacy|privacidad|privacidade|datenschutz|politica-de-privacidad|cookies?)([/_.-]|$)/i,
+  terms: /(^|[/_.#-])(terms|terminos|términos|condiciones|conditions|legal|tos)([/_.-]|$)/i,
 };
 
 /** Which "who is behind this site" pages does the homepage link to? Based on link paths only (heuristic). */
@@ -28,7 +28,7 @@ export function trustSignals(anchors) {
   for (const a of anchors) {
     if (!a.href) continue;
     let path = a.href;
-    try { path = new URL(a.href, 'https://x.invalid').pathname; } catch { /* keep raw */ }
+    try { const u = new URL(a.href, 'https://x.invalid'); path = u.pathname + u.hash; } catch { /* keep raw */ }   // the hash covers single-page sites (#contact)
     if (path.length > 300) continue;
     for (const k of Object.keys(TRUST)) if (!out[k] && TRUST[k].test(path)) out[k] = true;
   }

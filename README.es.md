@@ -9,7 +9,7 @@ Una skill de [Claude Code](https://claude.com/claude-code) y CLI sin dependencia
 La mayoría de herramientas califican páginas con un LLM (no reproducible) o repiten consejos sin evidencia. Esta se basa en tres reglas:
 
 1. **Determinista.** Lee tus páginas como un rastreador y tus archivos de código. Misma entrada, misma salida.
-2. **Estándar transparente.** Los 61 checks viven en [`catalog.mjs`](skills/rg-seo-geo-skill/scripts/lib/catalog.mjs), cada uno con nivel (bloqueante / importante / consejo), base (**oficial** / **medido** / **heurística**) y enlace a la fuente. [Lee el estándar](skills/rg-seo-geo-skill/references/standard.es.md).
+2. **Estándar transparente.** Los 66 checks viven en [`catalog.mjs`](skills/rg-seo-geo-skill/scripts/lib/catalog.mjs), cada uno con nivel (bloqueante / importante / consejo), base (**oficial** / **medido** / **heurística**) y enlace a la fuente. [Lee el estándar](skills/rg-seo-geo-skill/references/standard.es.md).
 3. **Honesta con GEO.** Las heurísticas están etiquetadas y nunca bloquean un lanzamiento. llms.txt es solo informativo: Google dice que no tiene efecto en Search.
 
 A propósito **no hay un puntaje 0–100**. El veredicto sale de bloqueantes y fallas importantes.
@@ -24,6 +24,12 @@ node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com
 
 # un proyecto Next.js + su URL en vivo
 node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com --src ../mi-sitio --out ./reporte
+
+# antes de publicar, cualquier tecnología: audita la carpeta compilada (dist, out, public, _site, build...)
+node skills/rg-seo-geo-skill/scripts/audit.mjs --build ./dist
+
+# muestra el progreso frente a la auditoría anterior guardada en la carpeta de salida
+node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com --out ./reporte --compare auto
 
 # puerta de CI: código de salida 1 si hay bloqueantes
 node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://staging.ejemplo.com --fail-on blocker --quiet
@@ -49,7 +55,16 @@ Los checks están ajustados contra un corpus de 27 sitios reales ([`test/corpus.
 
 ## Seguridad
 
-La herramienta consulta las URLs que le das, por eso bloquea por defecto direcciones privadas, loopback y link-local (verificado al conectar, para resistir DNS rebinding) y revalida cada redirección. Para auditar un servidor local necesitas `--allow-local`. Nunca ejecuta código del proyecto. No hace llamadas a terceros: solo contacta tu sitio.
+Esta herramienta visita URLs que no controla y lee documentos escritos por desconocidos, así que se atacó antes de publicarse: un revisor independiente intentó explotarla y cada hallazgo confirmado quedó como prueba de regresión ([`test/security.test.mjs`](test/security.test.mjs), [`test/security2.test.mjs`](test/security2.test.mjs)).
+
+- **SSRF:** se rechazan direcciones privadas, loopback, link-local y de metadatos, incluidas las formas IPv6 que esconden una IPv4 (mapeada, NAT64, 6to4, Teredo). La verificación ocurre al conectar (sin DNS rebinding) y en cada salto de redirección. `--allow-local` y `--build` alcanzan **un solo origen**, nunca lo que el contenido auditado señale.
+- **Entradas hostiles:** HTML, XML, robots.txt y JSON-LD se leen en una sola pasada lineal. Entradas que colgaban minutos al primer lector (basado en regex), como 700 mil etiquetas `<a ` sin cerrar, ahora toman milisegundos. Las respuestas tienen tope de tamaño (incluidas las bombas de descompresión) y de tiempo.
+- **Servidor de `--build`:** solo loopback, solo GET/HEAD, no puede salir de la carpeta (traversal, traversal codificado, symlinks, archivos ocultos) y rechaza cabeceras `Host` ajenas (DNS rebinding).
+- **Reportes:** el texto citado del sitio auditado se limpia de caracteres de control e invisibles de Unicode, se acota y se escapa en HTML y Markdown. Los reportes y `audit.json` llevan un aviso de "contenido no confiable", porque puede leerlos un agente de IA.
+- **Archivos:** `--out` nunca escribe a través de un symlink; los archivos de `--compare` se tratan como datos no confiables; `--src` no sigue symlinks; los reportes compartibles no contienen rutas locales absolutas.
+- **Sin terceros:** solo se contacta el sitio auditado. Nunca se ejecuta código del proyecto.
+
+Límite conocido: un hardlink colocado dentro de una carpeta de build por alguien con acceso local a la máquina se sirve como cualquier archivo. Si auditas una carpeta en la que no confías, hazlo en un entorno desechable.
 
 ## Desarrollo
 

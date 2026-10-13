@@ -8,7 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { Collector } from './lib/collector.mjs';
+import { Collector, sanitize } from './lib/collector.mjs';
 import { runUrlAudit } from './lib/url-checks.mjs';
 import { runNextAudit } from './lib/next-checks.mjs';
 import { serveStatic } from './lib/static-server.mjs';
@@ -68,7 +68,8 @@ async function main() {
   if (o.failOn && !['blocker', 'important'].includes(o.failOn)) throw new Error('--fail-on must be blocker or important');
   if (o.url && !/^https?:\/\//i.test(o.url)) o.url = `https://${o.url}`;
 
-  const log = o.quiet ? () => {} : (m) => process.stderr.write(`• ${m}\n`);
+  // Anything printed may include text from the audited site: strip control and invisible characters first.
+  const log = o.quiet ? () => {} : (m) => process.stderr.write(`• ${sanitize(m, 400)}\n`);
   // Safety net: never end silently. A stuck audit fails loudly after 5 minutes.
   const watchdog = setTimeout(() => { process.stderr.write('Error: audit timed out after 5 minutes\n'); process.exit(2); }, 300_000);
   const c = new Collector();
@@ -108,19 +109,27 @@ async function main() {
   let previous;
   if (o.compare) {
     const file = o.compare === 'auto' ? path.join(o.out, 'audit.json') : o.compare;
-    if (fs.existsSync(file)) {
+    const lst = lstatOrNull(file);
+    if (lst) {
+      if (lst.isSymbolicLink()) throw new Error(`--compare: refusing to read through a symlink: ${path.basename(file)}`);
       try {
-        if (fs.statSync(file).size > 5_000_000) throw new Error('file is larger than 5 MB');
+        if (lst.size > 5_000_000) throw new Error('file is larger than 5 MB');
         previous = JSON.parse(fs.readFileSync(file, 'utf8'));
-      } catch (e) { throw new Error(`--compare: cannot read ${file}: ${e.message}`); }
+      } catch { throw new Error(`--compare: ${path.basename(file)} is not a valid audit.json`); }   // never echo parser errors: they quote file contents
     } else if (o.compare !== 'auto') throw new Error(`--compare: file not found: ${file}`);
     else log('--compare auto: no previous audit.json in the output folder yet; this run becomes the baseline');
   }
+  cleanMeta(meta);
   const report = buildReport(c.results(), meta, o.lang, previous);
+  // Never write through a symlink (a cloned repo can ship one named report.md pointing at a file you care about).
+  const targets = ['report.html', 'report.md', 'audit.json'].map((f) => path.join(o.out, f));
+  const outStat = lstatOrNull(o.out);
+  if (outStat && outStat.isSymbolicLink()) throw new Error(`refusing to write into an output folder that is a symlink: ${o.out}`);
+  for (const t of targets) { const st = lstatOrNull(t); if (st && (st.isSymbolicLink() || !st.isFile())) throw new Error(`refusing to overwrite ${path.basename(t)}: it is a symlink or not a regular file`); }
   fs.mkdirSync(o.out, { recursive: true });
-  fs.writeFileSync(path.join(o.out, 'report.html'), toHtml(report));
-  fs.writeFileSync(path.join(o.out, 'report.md'), toMarkdown(report));
-  fs.writeFileSync(path.join(o.out, 'audit.json'), JSON.stringify({ meta, verdict: report.verdict, totals: report.totals, findings: report.findings }, null, 2));
+  safeWrite(targets[0], toHtml(report));
+  safeWrite(targets[1], toMarkdown(report));
+  safeWrite(targets[2], JSON.stringify({ notice: report.t.untrusted, meta, verdict: report.verdict, totals: report.totals, findings: report.findings }, null, 2));
 
   const tt = report.totals;
   process.stdout.write(`${report.t.verdict[report.verdict]}\n` +
@@ -131,4 +140,23 @@ async function main() {
   if (o.failOn === 'important' && (tt.blockers > 0 || tt.importantFails > 0)) process.exit(1);
 }
 
-main().catch((e) => { process.stderr.write(`Error: ${e.message}\n`); process.exit(2); });
+function lstatOrNull(f) { try { return fs.lstatSync(f); } catch { return null; } }
+
+/** Open without following symlinks (O_NOFOLLOW) so a race cannot redirect the write either. */
+function safeWrite(file, data) {
+  const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0);
+  const fd = fs.openSync(file, flags, 0o644);
+  try { fs.writeFileSync(fd, data); } finally { fs.closeSync(fd); }
+}
+
+/** Metadata ends up in shared reports: bound it, strip hostile characters, and drop local paths. */
+function cleanMeta(meta) {
+  delete meta.srcPath;
+  for (const k of ['src', 'buildDir', 'framework', 'stack', 'productionOrigin', 'finalUrl', 'url', 'origin', 'error', 'tool', 'date']) {
+    if (typeof meta[k] === 'string') meta[k] = sanitize(meta[k], 200);
+  }
+  if (Array.isArray(meta.pages)) meta.pages = meta.pages.slice(0, 50).map((u) => sanitize(u, 300));
+  if (Array.isArray(meta.notes)) meta.notes = meta.notes.filter((n) => typeof n === 'string').slice(0, 10).map((n) => sanitize(n, 40));
+}
+
+main().catch((e) => { process.stderr.write(`Error: ${sanitize(e.message, 400)}\n`); process.exit(2); });

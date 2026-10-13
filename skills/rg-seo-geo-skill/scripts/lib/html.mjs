@@ -312,7 +312,7 @@ export function parseHtml(rawHtml) {
 export function imageSize(buf) {
   if (!buf || buf.length < 24) return null;
   if (buf[0] === 0x89 && buf[1] === 0x50) return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
-  if (buf.toString('ascii', 0, 3) === 'GIF') return { width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) };
+  if (buf.toString('ascii', 0, 3) === 'GIF') return buf.length >= 10 ? { width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) } : null;
   if (buf[0] === 0xff && buf[1] === 0xd8) {
     let i = 2;
     while (i < buf.length - 9) {
@@ -328,12 +328,13 @@ export function imageSize(buf) {
   }
   if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
     const fmt = buf.toString('ascii', 12, 16);
-    if (fmt === 'VP8 ') return { width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff };
+    if (fmt === 'VP8 ') return buf.length >= 30 ? { width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff } : null;
     if (fmt === 'VP8L') {
+      if (buf.length < 25) return null;
       const b = buf.readUInt32LE(21);
       return { width: (b & 0x3fff) + 1, height: ((b >> 14) & 0x3fff) + 1 };
     }
-    if (fmt === 'VP8X') return { width: 1 + buf.readUIntLE(24, 3), height: 1 + buf.readUIntLE(27, 3) };
+    if (fmt === 'VP8X') return buf.length >= 30 ? { width: 1 + buf.readUIntLE(24, 3), height: 1 + buf.readUIntLE(27, 3) } : null;
   }
   return null;
 }

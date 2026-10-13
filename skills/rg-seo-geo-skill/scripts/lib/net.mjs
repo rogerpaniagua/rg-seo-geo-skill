@@ -87,13 +87,15 @@ function guardedLookup(allowLocal) {
   };
 }
 
-function once(url, { method, headers, allowLocal, timeout, maxBytes, binary }) {
+function once(url, { method, headers, allowLocal, allowedOrigin, timeout, maxBytes, binary }) {
   return new Promise((resolve, reject) => {
     let u;
     try { u = new URL(url); } catch { return reject(new Error(`Invalid URL: ${url}`)); }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return reject(new Error(`Unsupported protocol: ${u.protocol}`));
+    // Private addresses are allowed for exactly one origin (the local site being audited), never globally.
+    const local = allowLocal || (allowedOrigin !== undefined && u.origin === allowedOrigin);
     const bare = u.hostname.replace(/^\[|\]$/g, '');
-    if (net.isIP(bare) && !allowLocal && isPrivateIp(bare)) {
+    if (net.isIP(bare) && !local && isPrivateIp(bare)) {
       return reject(new Error(`Blocked private address ${u.hostname} (use --allow-local to audit local/dev servers)`));
     }
     const lib = u.protocol === 'https:' ? https : http;
@@ -111,7 +113,7 @@ function once(url, { method, headers, allowLocal, timeout, maxBytes, binary }) {
       if (err) reject(err); else resolve(value);
     };
     // maxHeaderSize: some sites (e.g. webflow.com) send >16 KB of headers, above Node's default limit.
-    req = lib.request(u, { method, headers, lookup: guardedLookup(allowLocal), timeout, maxHeaderSize: 128 * 1024 }, (res) => {
+    req = lib.request(u, { method, headers, lookup: guardedLookup(local), timeout, maxHeaderSize: 128 * 1024 }, (res) => {
       let stream = res;
       const enc = String(res.headers['content-encoding'] || '').toLowerCase();
       if (enc === 'gzip') stream = res.pipe(zlib.createGunzip());
@@ -150,7 +152,7 @@ function once(url, { method, headers, allowLocal, timeout, maxBytes, binary }) {
  */
 export async function fetchUrl(url, opts = {}) {
   const {
-    method = 'GET', ua = DEFAULT_UA, allowLocal = false, timeout = 15000,
+    method = 'GET', ua = DEFAULT_UA, allowLocal = false, allowedOrigin, timeout = 15000,
     maxBytes = 3_000_000, maxRedirects = 6, follow = true, binary = false, headers = {}, retries = 2,
   } = opts;
   const redirects = [];
@@ -163,7 +165,7 @@ export async function fetchUrl(url, opts = {}) {
       r = await once(current, {
         method,
         headers: { 'user-agent': ua, accept: binary ? '*/*' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'accept-encoding': 'gzip, deflate, br', ...headers },
-        allowLocal, timeout, maxBytes, binary,
+        allowLocal, allowedOrigin, timeout, maxBytes, binary,
       });
     } catch (e) {
       return { url, finalUrl: current, status: 0, headers: {}, body: binary ? Buffer.alloc(0) : '', redirects, ms: Date.now() - started, error: e.message };
@@ -180,7 +182,8 @@ export async function fetchUrl(url, opts = {}) {
     }
     const loc = r.headers.location;
     if (follow && r.status >= 300 && r.status < 400 && loc) {
-      const next = new URL(loc, current).toString();
+      let next;
+      try { next = new URL(loc, current).toString(); } catch { return { url, finalUrl: current, status: 0, headers: r.headers || {}, body: binary ? Buffer.alloc(0) : '', redirects, ms: Date.now() - started, error: 'Invalid redirect Location header' }; }
       redirects.push({ from: current, to: next, status: r.status });
       current = next;
       continue;

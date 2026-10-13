@@ -1,12 +1,13 @@
 import { CHECKS, CHECK_BY_ID } from './catalog.mjs';
 
-// Evidence quotes text from the audited site, and is read by humans and by AI agents. Strip control
-// and bidirectional-override characters, collapse whitespace and bound the length so a hostile
-// page cannot smuggle long payloads or terminal escapes into a report.
+// Evidence quotes text from the audited site, and is read by humans and by AI agents. Strip control,
+// invisible and bidirectional-override characters, collapse whitespace (so no line can start a
+// Markdown heading) and bound the length, so a hostile page cannot smuggle payloads into a report.
 export function sanitize(value, max = 300) {
   const s = String(value ?? '')
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[\p{Zs}\s]+/gu, ' ')                                  // collapse every kind of whitespace, including newlines
+    .replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cs}\p{Cn}]/gu, '')              // controls, invisible format chars (incl. Unicode "tag" characters U+E0000-E007F), private use
+    .replace(/[\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu, '')            // variation selectors
     .trim();
   return s.length > max ? s.slice(0, max) + '…' : s;
 }

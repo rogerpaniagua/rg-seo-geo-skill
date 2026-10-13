@@ -31,11 +31,30 @@ function registrable(host) {
 /** True when two hosts belong to the same site (same registrable domain), e.g. en.wikipedia.org and www.wikipedia.org. */
 export function sameSite(a, b) { return registrable(a) === registrable(b); }
 
-const norm = (u) => {
+/** URL parsing for values controlled by the audited site: returns null instead of throwing. */
+const safeUrl = (value, base) => { try { return new URL(value, base); } catch { return null; } };
+
+/** Linear-time trim of trailing "/" (a regex like /\/+$/ is quadratic on long runs of slashes). */
+function trimTrailingSlashes(p) {
+  let end = p.length;
+  while (end > 0 && p.charCodeAt(end - 1) === 47) end--;
+  return p.slice(0, end);
+}
+
+/** Linear-time trim of leading/trailing commas. */
+function trimCommas(s) {
+  let a = 0;
+  let b = s.length;
+  while (a < b && s[a] === ',') a++;
+  while (b > a && s[b - 1] === ',') b--;
+  return s.slice(a, b);
+}
+
+export const norm = (u) => {
   try {
     const x = new URL(u);
     x.hash = '';
-    let p = x.pathname.replace(/\/+$/, '');
+    let p = trimTrailingSlashes(x.pathname);
     if (p === '') p = '/';
     return `${x.protocol}//${x.host.toLowerCase()}${p}${x.search}`;
   } catch { return u; }
@@ -84,8 +103,13 @@ function pickSample(urls, startUrl, n) {
 
 export async function runUrlAudit(opts, c, log = () => {}) {
   const { allowLocal = false, maxPages = 6 } = opts;
-  const net_ = { allowLocal };
+  let internalErrors = 0;   // an unexpected exception in one section must never abort the audit, nor pass silently
+  const guard = (fn) => { try { return fn(); } catch { internalErrors++; return undefined; } };
+  const guardAsync = async (fn) => { try { return await fn(); } catch { internalErrors++; return undefined; } };
   const start = new URL(opts.url).toString();
+  // --allow-local means "the site I am auditing is local": private addresses are reachable for that ONE origin only,
+  // never for anything the audited content points at (sitemaps, images, links, redirects).
+  const net_ = allowLocal ? { allowedOrigin: new URL(start).origin } : {};
 
   // ---- 1. Start page ----
   log(`Fetching ${start}`);
@@ -192,7 +216,7 @@ export async function runUrlAudit(opts, c, log = () => {}) {
       let u;
       try { u = new URL(e.loc); } catch { problems.push(`not absolute: ${e.loc}`); continue; }
       if (u.protocol !== 'https:' && !isLocalHost) problems.push(`not https: ${e.loc}`);
-      if (u.hostname !== finalUrl.hostname) {
+      if (u.host !== finalUrl.host) {
         // Google: a sitemap may only list URLs of its own host unless cross-submitted/verified.
         // A sibling subdomain is usually deliberate (soft); another domain is a real problem.
         (sameSite(u.hostname, finalUrl.hostname) ? soft : problems).push(`other host (${u.hostname}): ${e.loc}`);
@@ -229,7 +253,7 @@ export async function runUrlAudit(opts, c, log = () => {}) {
 
   // ---- 5. Fetch sampled pages (sitemap first; otherwise discover through internal links) ----
   const firstParsed = parseHtml(first.body);
-  let pool_ = sitemapUrls.filter((u) => { try { return new URL(u).hostname === finalUrl.hostname; } catch { return false; } });
+  let pool_ = sitemapUrls.filter((u) => { const x = safeUrl(u); return x !== null && x.host === finalUrl.host; });
   let discovered = false;
   if (!pool_.length) {
     discovered = true;
@@ -238,7 +262,7 @@ export async function runUrlAudit(opts, c, log = () => {}) {
       if (!a.href || /^(#|javascript:|mailto:|tel:)/i.test(a.href)) continue;
       try {
         const u = new URL(a.href, first.finalUrl);
-        if (u.hostname !== finalUrl.hostname || !/^https?:$/.test(u.protocol)) continue;
+        if (u.host !== finalUrl.host || !/^https?:$/.test(u.protocol)) continue;
         if (/\.(png|jpe?g|webp|svg|gif|pdf|zip|mp4|ico|css|js|xml|txt)$/i.test(u.pathname)) continue;
         u.hash = ''; u.search = '';
         seenLinks.add(u.toString());
@@ -276,7 +300,7 @@ export async function runUrlAudit(opts, c, log = () => {}) {
       continue;
     }
     if (!p.isHome) c.add('crawl.page-ok', 'pass', 'HTTP 200', scope);
-    pageChecks(p, scope, c);
+    guard(() => pageChecks(p, scope, c));
     if (p.parsed.title) titles.set(p.parsed.title, [...(titles.get(p.parsed.title) || []), scope || '/']);
     if (p.parsed.description) descs.set(p.parsed.description, [...(descs.get(p.parsed.description) || []), scope || '/']);
   }
@@ -291,21 +315,21 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   }
 
   const home = pages[0];
-  if (home.parsed) homeChecks(home, pages, sitemapUrls, c, robots, robotsOk);
+  if (home.parsed) guard(() => homeChecks(home, pages, sitemapUrls, c, robots, robotsOk));
 
   // ---- 5b. Site health: sample internal links from the audited pages and check their status ----
-  await checkInternalLinks(pages, finalUrl, net_, c);
+  await guardAsync(() => checkInternalLinks(pages, finalUrl, net_, c));
 
   // ---- 6. Social images ----
-  const imgUrls = [...new Set(pages.filter((p) => p.parsed && p.parsed.og['og:image']).map((p) => new URL(p.parsed.og['og:image'], p.url).toString()))].slice(0, 4);
+  const imgUrls = [...new Set(pages.filter((p) => p.parsed && p.parsed.og['og:image']).map((p) => safeUrl(p.parsed.og['og:image'], p.url)).filter(Boolean).map((u) => u.toString()))].slice(0, 4);
   if (!imgUrls.length) {
     c.add('social.og-image', 'fail', 'no og:image on any sampled page');
     c.add('social.og-image-size', 'skip', 'no og:image');
   }
-  for (const iu of imgUrls) {
+  await guardAsync(async () => { for (const iu of imgUrls) {
     const r = await fetchUrl(iu, { ...net_, binary: true, maxBytes: 8_000_000 });
     const ct = String((r.headers && r.headers['content-type']) || '');
-    const raw = pages.map((p) => p.parsed && p.parsed.og['og:image']).find((v) => v && new URL(v, pages[0].url).toString() === iu);
+    const raw = pages.map((p) => p.parsed && p.parsed.og['og:image']).find((v) => { const x = v && safeUrl(v, pages[0].url); return x && x.toString() === iu; });
     if (/localhost|127\.0\.0\.1/.test(iu) && !isLocalHost) c.add('social.og-image', 'fail', `og:image points to localhost: ${iu}`);
     else if (r.error || r.status !== 200) c.add('social.og-image', 'fail', `${iu}: ${r.error || 'HTTP ' + r.status}`);
     else if (!ct.startsWith('image/')) c.add('social.og-image', 'fail', `${iu}: content-type ${ct || 'unknown'}`);
@@ -323,6 +347,8 @@ export async function runUrlAudit(opts, c, log = () => {}) {
       c.add('social.og-image-size', problems.length ? 'warn' : 'pass', problems.length ? `${iu.split('/').pop()}: ${problems.join('; ')}` : `${dims ? dims.width + '×' + dims.height : 'size unknown'}, ${kb} KB`);
     }
   }
+
+  }); // end of guarded share-image checks
 
   // ---- 7. Soft 404 ----
   const probe = `${origin}/__rg-seo-geo-skill-${Math.random().toString(36).slice(2, 8)}`;
@@ -359,7 +385,7 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   }
   const stack = detectStack(first.body, first.headers, home.parsed ? home.parsed.metaMap : {});
 
-  return { aborted: false, meta: { url: start, finalUrl: first.finalUrl, origin, pages: pageUrls, sitemapUrlCount: sitemapUrls.length, discoveredPages: discovered, robotsFound: robotsOk, stack, notes, hasJsonLd: !!(home.parsed && home.parsed.jsonLd.length), hasSitemap: !sitemapMissing } };
+  return { aborted: false, meta: { url: start, finalUrl: first.finalUrl, origin, pages: pageUrls, sitemapUrlCount: sitemapUrls.length, discoveredPages: discovered, robotsFound: robotsOk, stack, notes, hasJsonLd: !!(home.parsed && home.parsed.jsonLd.length), hasSitemap: !sitemapMissing, internalErrors } };
 }
 
 function pageChecks(p, scope, c) {
@@ -368,9 +394,9 @@ function pageChecks(p, scope, c) {
 
   // noindex
   const xrt = String(res.headers['x-robots-tag'] || '').toLowerCase();
-  const directives = `${d.robotsMeta},${d.googlebotMeta},${xrt}`;
+  const directives = `${d.robotsMeta},${d.googlebotMeta},${xrt}`.slice(0, 400);   // bounded: the value is chosen by the audited site
   const noindex = /(^|[,\s])(noindex|none)([,\s]|$)/.test(directives);
-  const noindexEvidence = noindex ? `noindex found (${directives.replace(/^,+|,+$/g, '')})` : 'indexable';
+  const noindexEvidence = noindex ? `noindex found (${trimCommas(directives)})` : 'indexable';
   if (p.isHome) c.add('crawl.not-noindex', noindex ? 'fail' : 'pass', noindexEvidence, scope);
   else c.add('crawl.sitemap-noindex', noindex ? 'fail' : 'pass', noindex ? `${noindexEvidence} but listed in the sitemap` : noindexEvidence, scope);
   const nosnippet = /nosnippet|max-snippet:\s*0\b/.test(directives);
@@ -380,9 +406,11 @@ function pageChecks(p, scope, c) {
   if (!d.canonical) c.add('crawl.canonical', 'warn', 'no canonical link (recommended: a self-referencing canonical)', scope);
   else {
     const abs = /^https?:\/\//i.test(d.canonical);
-    const resolved = new URL(d.canonical, pageUrl).toString();
-    if (norm(resolved) !== norm(pageUrl)) {
-      const toHome = new URL(resolved).pathname === '/' && new URL(pageUrl).pathname !== '/';
+    const resolvedUrl = safeUrl(d.canonical, pageUrl);
+    const resolved = resolvedUrl ? resolvedUrl.toString() : null;
+    if (!resolved) c.add('crawl.canonical', 'warn', `canonical is not a valid URL: "${String(d.canonical).slice(0, 80)}"`, scope);
+    else if (norm(resolved) !== norm(pageUrl)) {
+      const toHome = resolvedUrl.pathname === '/' && new URL(pageUrl).pathname !== '/';
       c.add('crawl.canonical', toHome ? 'fail' : 'warn',
         toHome ? `canonical points to the HOMEPAGE (${resolved}) although this is ${pageUrl}: tells Google this page duplicates the home`
           : `canonical ${resolved} ≠ page ${pageUrl} (intentional consolidation?)`, scope);
@@ -440,7 +468,7 @@ function pageChecks(p, scope, c) {
   // hreflang
   if (!d.hreflang.length) c.add('content.hreflang', 'skip', 'not used', scope);
   else {
-    const self = d.hreflang.some((h) => norm(new URL(h.href, pageUrl).toString()) === norm(pageUrl));
+    const self = d.hreflang.some((h) => { const x = safeUrl(h.href, pageUrl); return x !== null && norm(x.toString()) === norm(pageUrl); });
     const badCodes = d.hreflang.filter((h) => !/^(x-default|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$/.test(h.lang));
     const xdef = d.hreflang.some((h) => h.lang === 'x-default');
     c.add('content.hreflang', !self || badCodes.length ? 'fail' : !xdef ? 'warn' : 'pass',
@@ -450,8 +478,8 @@ function pageChecks(p, scope, c) {
   // Structured data property completeness
   const problems = [];
   for (const b of d.jsonLd) for (const node of b.nodes) for (const t of types(node)) {
-    const req = REQUIRED_PROPS[t];
-    if (!req) continue;
+    const req = typeof t === 'string' && Object.hasOwn(REQUIRED_PROPS, t) ? REQUIRED_PROPS[t] : null;
+    if (!Array.isArray(req)) continue;
     const missing = req.filter((k) => node[k] === undefined || node[k] === '');
     if (missing.length) problems.push(`${t}: missing ${missing.join(', ')}`);
   }
@@ -505,18 +533,19 @@ function homeChecks(home, pages, sitemapUrls, c, robots, robotsOk) {
   // who is behind the site
   const trust = trustSignals(d.anchors);
   const missingTrust = ['about', 'contact', 'privacy'].filter((k) => !trust[k]);
-  c.add('geo.trust-pages', missingTrust.length === 0 ? 'pass' : 'warn', missingTrust.length ? `no link to: ${missingTrust.join(', ')}` : 'about, contact and privacy are linked');
+  // One of the three is enough to answer "who is behind this site"; warn only when the homepage links to none of them.
+  c.add('geo.trust-pages', missingTrust.length === 3 ? 'warn' : 'pass', missingTrust.length === 3 ? 'no link to an about, contact or privacy page' : `links to: ${['about', 'contact', 'privacy'].filter((k) => trust[k]).join(', ')}${missingTrust.length ? ` (not found: ${missingTrust.join(', ')})` : ''}`);
 
   // Internal links present on the homepage but missing from the sitemap
   if (sitemapUrls.length) {
     const inSitemap = new Set(sitemapUrls.map(norm));
-    const host = new URL(home.url).hostname;
+    const host = new URL(home.url).host;
     const linked = new Set();
     for (const a of d.anchors) {
       if (!a.href || /^(#|javascript:|mailto:|tel:)/i.test(a.href)) continue;
       try {
         const u = new URL(a.href, home.url);
-        if (u.hostname !== host || /\.(png|jpe?g|webp|svg|pdf|zip|mp4|ico)$/i.test(u.pathname)) continue;
+        if (u.host !== host || /\.(png|jpe?g|webp|svg|pdf|zip|mp4|ico)$/i.test(u.pathname)) continue;
         u.search = '';
         linked.add(norm(u.toString()));
       } catch { /* ignore */ }
@@ -543,7 +572,7 @@ async function checkInternalLinks(pages, finalUrl, net_, c) {
       if (!a.href || /^(#|javascript:|mailto:|tel:|data:)/i.test(a.href)) continue;
       let u;
       try { u = new URL(a.href, p.res.finalUrl); } catch { continue; }
-      if (!/^https?:$/.test(u.protocol) || u.hostname !== finalUrl.hostname) continue;
+      if (!/^https?:$/.test(u.protocol) || u.host !== finalUrl.host) continue;
       u.hash = '';
       const key = norm(u.toString());
       if (fetched.has(key) || seen.has(key)) continue;
@@ -565,13 +594,16 @@ async function checkInternalLinks(pages, finalUrl, net_, c) {
 
   const results = await pool(picked, 3, async (l) => {
     let r = await fetchUrl(l.url, { ...net_, method: 'HEAD', follow: false, timeout: 8000, maxBytes: 50_000 });
-    if (r.status === 405 || r.status === 501 || r.status === 400 || r.error) r = await fetchUrl(l.url, { ...net_, follow: false, timeout: 8000, maxBytes: 50_000 });
+    if (r.status === 405 || r.status === 501 || r.status === 400 || r.status >= 500 || r.error) r = await fetchUrl(l.url, { ...net_, follow: false, timeout: 8000, maxBytes: 50_000 });
     return { ...l, status: r.status, error: r.error };
   });
   const where = (r) => `${pathOf(r.url) || '/'} (linked from ${r.from})`;
   const broken = results.filter((r) => r.status === 404 || r.status === 410 || (r.error && !r.status));
   const serverErr = results.filter((r) => r.status >= 500 && r.status < 600 && r.status !== 503);
-  const redirected = results.filter((r) => r.status >= 300 && r.status < 400);
+  // Only permanent redirects mean the link is out of date. 302/303/307 are usually deliberate (language, A/B, login) and
+  // auth/API endpoints redirect by design.
+  const intentional = /(^|\/)(api|auth|oauth|login|logout|signin|signup|sso|callback)(\/|$)/i;
+  const redirected = results.filter((r) => (r.status === 301 || r.status === 308) && !intentional.test(pathOf(r.url)));
   const refused = results.filter((r) => [401, 403, 429, 503].includes(r.status));
   const checked = results.length - refused.length;
   c.add('health.broken-links', broken.length ? 'fail' : serverErr.length ? 'warn' : checked ? 'pass' : 'skip',

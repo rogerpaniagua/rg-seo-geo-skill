@@ -73,6 +73,7 @@ export async function serveStatic(rootDir) {
   if (!fs.statSync(realRoot).isDirectory()) throw new Error('not a directory');
   const productionOrigin = detectProductionOrigin(realRoot);
   let origin = '';
+  let allowedHosts = [];
 
   const rewrite = (buf, ext) => {
     if (!productionOrigin || !REWRITE.has(ext)) return buf;
@@ -85,6 +86,10 @@ export async function serveStatic(rootDir) {
       res.writeHead(status, { 'content-type': type, 'content-length': body.length, 'x-content-type-options': 'nosniff', 'cache-control': 'no-store' });
       res.end(req.method === 'HEAD' ? undefined : body);
     };
+    // DNS-rebinding defence: only answer requests addressed to this loopback server. A web page the user
+    // happens to have open could otherwise make the browser read the build through a hostile hostname.
+    const host = String(req.headers.host || '').toLowerCase();
+    if (host !== allowedHosts[0] && host !== allowedHosts[1]) return send(403, Buffer.from('Forbidden'));
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('allow', 'GET, HEAD'); return send(405, Buffer.from('Method not allowed')); }
     let pathname;
     try { pathname = new URL(req.url, 'http://local.invalid').pathname; } catch { return send(400, Buffer.from('Bad request')); }
@@ -101,7 +106,9 @@ export async function serveStatic(rootDir) {
   });
 
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  origin = `http://127.0.0.1:${server.address().port}`;
+  const port = server.address().port;
+  origin = `http://127.0.0.1:${port}`;
+  allowedHosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   return {
     origin,
     productionOrigin,

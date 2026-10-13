@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { sanitize } from './collector.mjs';
 
 const IGNORE = new Set(['node_modules', '.next', '.git', '.vercel', 'dist', 'build', 'out', 'coverage']);
 const CODE = /\.(tsx|ts|jsx|js|mjs)$/;
@@ -29,9 +30,42 @@ function read(file) {
   } catch { return ''; }
 }
 
-const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-const isUseClient = (src) => /^\s*(?:\/\*[\s\S]*?\*\/\s*|\/\/.*\n\s*)*['"]use client['"]/.test(src);
-const exportsMetadata = (src) => /export\s+(?:const|let|async\s+function|function)\s+(?:metadata|generateMetadata)\b|export\s*\{[^}]*\b(?:metadata|generateMetadata)\b/.test(src);
+// Linear-time comment stripper. (The regex form /\/\*[\s\S]*?\*\// is quadratic on many unclosed "/*".)
+// "//" after ":" is kept so URLs survive.
+function stripComments(s) {
+  let out = '';
+  let last = 0;
+  let i = 0;
+  const n = s.length;
+  while (i < n) {
+    const c = s.charCodeAt(i);
+    if (c === 47 && s.charCodeAt(i + 1) === 42) {                 // /* ... */
+      const e = s.indexOf('*/', i + 2);
+      out += s.slice(last, i) + ' ';
+      if (e === -1) return out;                                    // unterminated: the rest is comment
+      i = last = e + 2;
+    } else if (c === 47 && s.charCodeAt(i + 1) === 47 && s.charCodeAt(i - 1) !== 58) {   // // line comment, not "://"
+      out += s.slice(last, i);
+      const nl = s.indexOf('\n', i);
+      if (nl === -1) return out;
+      i = last = nl;
+    } else i++;
+  }
+  return out + s.slice(last);
+}
+// Linear scan over leading whitespace and comments, then check for the directive.
+function isUseClient(src) {
+  let j = 0;
+  const n = src.length;
+  for (;;) {
+    while (j < n && /\s/.test(src[j])) j++;
+    if (src.startsWith('/*', j)) { const e = src.indexOf('*/', j + 2); if (e === -1) return false; j = e + 2; continue; }
+    if (src.startsWith('//', j)) { const e = src.indexOf('\n', j); if (e === -1) return false; j = e + 1; continue; }
+    break;
+  }
+  return src.startsWith("'use client'", j) || src.startsWith('"use client"', j);
+}
+const exportsMetadata = (src) => /export\s+(?:const|let|async\s+function|function)\s+(?:metadata|generateMetadata)\b|export\s*\{[^}]{0,500}\b(?:metadata|generateMetadata)\b/.test(src);
 const hasNoindex = (src) => /index\s*:\s*false|noindex/.test(src);
 
 function routeOf(appDir, file) {
@@ -42,7 +76,7 @@ function routeOf(appDir, file) {
 
 export function runNextAudit(opts, c, log = () => {}) {
   const root = path.resolve(opts.src);
-  const meta = { src: path.basename(root), srcPath: root, framework: null };
+  const meta = { src: sanitize(path.basename(root), 80), framework: null };
   if (!fs.existsSync(root)) throw new Error(`Source directory not found: ${root}`);
 
   let pkg = {};
@@ -52,9 +86,10 @@ export function runNextAudit(opts, c, log = () => {}) {
     meta.note = 'No "next" dependency in package.json. Source mode currently supports Next.js (App Router). Use URL mode for this project.';
     return { skipped: true, meta };
   }
-  meta.framework = `Next.js ${deps.next}`;
+  // The version string comes from the audited project's package.json: validate it, never echo it raw.
+  meta.framework = `Next.js ${typeof deps.next === 'string' && /^[\w.^~<>=* |-]{1,30}$/.test(deps.next) ? deps.next : '(unrecognised version)'}`;
 
-  const appDir = ['app', 'src/app'].map((d) => path.join(root, d)).find((d) => fs.existsSync(d));
+  const appDir = ['app', 'src/app'].map((d) => path.join(root, d)).find((d) => { try { const st = fs.lstatSync(d); return st.isDirectory() && !st.isSymbolicLink(); } catch { return false; } });
   if (!appDir) {
     meta.note = 'No app/ directory found (Pages Router?). Source mode supports the App Router only. Use URL mode.';
     return { skipped: true, meta };

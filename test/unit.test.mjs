@@ -174,3 +174,7 @@ test('lists and tables inside <noscript> do not count as content structure', () 
   assert.equal(d.listCount, 1);
   assert.equal(d.tableCount, 1);
 });
+
+test('trust signals also read in-page anchors, for single-page sites (#contact, /#about)', () => {
+  assert.deepEqual(trustSignals([{ href: '#contact' }, { href: '/#about-me' }, { href: '#work' }]), { about: true, contact: true, privacy: false, terms: false });
+});

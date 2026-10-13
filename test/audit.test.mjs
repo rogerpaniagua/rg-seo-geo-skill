@@ -410,3 +410,37 @@ test('healthy internal links pass', async () => {
   assert.equal(status(r, 'health.broken-links'), 'pass');
   assert.equal(status(r, 'health.redirected-links'), 'pass');
 });
+
+// ---- calibration of the health checks against the real corpus ----
+test('redirected links: only permanent redirects (301/308) are advice; temporary and auth/API redirects are intentional', async () => {
+  const links = ['/perm', '/perm308', '/temp302', '/temp307', '/api/auth/start', '/login'].map((p) => `<a href="${p}">${p}</a>`).join('');
+  const { r } = await auditPages((req, res) => {
+    const u = req.url;
+    if (u === '/') { res.setHeader('content-type', 'text/html'); return res.end(html('', `<h1>Home</h1><p>${'word '.repeat(120)}</p>${links}`)); }
+    const codes = { '/perm': 301, '/perm308': 308, '/temp302': 302, '/temp307': 307, '/api/auth/start': 301, '/login': 301 };
+    if (codes[u]) { res.statusCode = codes[u]; res.setHeader('location', '/'); return res.end(); }
+    res.statusCode = 404; res.end('nf');
+  }, { maxPages: 1 });
+  const x = r.find((y) => y.id === 'health.redirected-links');
+  assert.equal(x.status, 'warn');
+  const ev = x.evidence.join(' ');
+  assert.match(ev, /\/perm\b/);
+  assert.match(ev, /\/perm308/);
+  assert.doesNotMatch(ev, /temp302|temp307|api\/auth|login/);
+});
+
+test('a link that fails on HEAD but works on GET is not broken', async () => {
+  const { r } = await auditPages((req, res) => {
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html('', `<h1>Home</h1><p>${'word '.repeat(120)}</p><a href="/headbug">x</a>`)); }
+    if (req.url === '/headbug') { if (req.method === 'HEAD') { res.statusCode = 500; return res.end(); } res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    res.statusCode = 404; res.end('nf');
+  }, { maxPages: 1 });
+  assert.equal(status(r, 'health.broken-links'), 'pass');
+});
+
+test('trust pages: warn only when the homepage gives NO "who is behind this" link at all', async () => {
+  const run = (links) => auditPages((req, res) => { if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html('', `<h1>Home</h1><p>${'word '.repeat(120)}</p>${links}`)); } res.statusCode = 404; res.end('nf'); }, { maxPages: 1 });
+  assert.equal(status((await run('<a href="/about">a</a>')).r, 'geo.trust-pages'), 'pass');
+  assert.equal(status((await run('<a href="#contact">c</a>')).r, 'geo.trust-pages'), 'pass');
+  assert.equal(status((await run('<a href="/blog">b</a>')).r, 'geo.trust-pages'), 'warn');
+});

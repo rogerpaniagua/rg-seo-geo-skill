@@ -40,12 +40,12 @@ test('compareAudits treats a previous file as untrusted: unknown ids and statuse
   const r = compareAudits({ meta: { date: '<script>x</script>' }, verdict: 'solid', findings: [f('not.a.check', 'fail'), f('meta.title', 'evil'), { nope: 1 }, null, f('crawl.canonical', 'fail')] },
     [f('crawl.canonical', 'pass')]);
   assert.deepEqual(r.resolved, ['crawl.canonical']);
-  assert.equal(r.previousDate, '<script>x</script>');   // kept as data; the renderers escape it
+  assert.equal(r.previousDate, undefined);               // free text is never echoed; only a real ISO date is
   assert.throws(() => compareAudits({ findings: 'nope' }, []), /findings/);
 });
 
 test('reports show the progress section, in both languages, with escaped data', () => {
-  const prev = { meta: { date: '<b>old</b>' }, verdict: 'not-ready', findings: [f('crawl.canonical', 'fail')] };
+  const prev = { meta: { date: '2026-10-01' }, verdict: 'not-ready', findings: [f('crawl.canonical', 'fail')] };
   const cur = [f('crawl.canonical', 'pass')];
   for (const lang of ['en', 'es']) {
     const rep = buildReport(cur, { date: '2026-10-13', finalUrl: 'https://a.com/' }, lang, prev);
@@ -53,7 +53,6 @@ test('reports show the progress section, in both languages, with escaped data', 
     const md = toMarkdown(rep);
     assert.match(html, lang === 'en' ? /Progress since/ : /Progreso desde/);
     assert.match(md, lang === 'en' ? /Progress since/ : /Progreso desde/);
-    assert.ok(!html.includes('<b>old</b>'), 'previous date must be escaped');
     assert.equal(rep.progress.resolved.length, 1);
   }
   assert.equal(buildReport(cur, { date: 'x' }, 'en').progress, undefined);
