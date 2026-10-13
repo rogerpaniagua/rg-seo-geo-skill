@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseHtml, parseRobots, robotsAllows, parseSitemap, imageSize } from '../skills/seo-geo-audit/scripts/lib/html.mjs';
-import { isPrivateIp, fetchUrl } from '../skills/seo-geo-audit/scripts/lib/net.mjs';
-import { CHECKS } from '../skills/seo-geo-audit/scripts/lib/catalog.mjs';
-import { Collector } from '../skills/seo-geo-audit/scripts/lib/collector.mjs';
+import { parseHtml, parseRobots, robotsAllows, parseSitemap, imageSize } from '../skills/rg-seo-geo-skill/scripts/lib/html.mjs';
+import { isPrivateIp, fetchUrl } from '../skills/rg-seo-geo-skill/scripts/lib/net.mjs';
+import { CHECKS } from '../skills/rg-seo-geo-skill/scripts/lib/catalog.mjs';
+import { Collector } from '../skills/rg-seo-geo-skill/scripts/lib/collector.mjs';
 
 test('parseHtml extracts head metadata, headings, links and JSON-LD', () => {
   const d = parseHtml(`<!doctype html><html lang="es"><head><title>Hola &amp; adiós</title>

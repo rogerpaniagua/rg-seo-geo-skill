@@ -13,7 +13,7 @@ import { runUrlAudit } from './lib/url-checks.mjs';
 import { runNextAudit } from './lib/next-checks.mjs';
 import { buildReport, toHtml, toMarkdown } from './lib/report.mjs';
 
-const HELP = `seo-geo-audit
+const HELP = `rg-seo-geo-skill
 
 Usage:
   node audit.mjs --url <https://site> [options]
@@ -64,7 +64,7 @@ async function main() {
   // Safety net: never end silently. A stuck audit fails loudly after 5 minutes.
   const watchdog = setTimeout(() => { process.stderr.write('Error: audit timed out after 5 minutes\n'); process.exit(2); }, 300_000);
   const c = new Collector();
-  const meta = { date: new Date().toISOString().slice(0, 10), tool: 'seo-geo-audit 0.1.0' };
+  const meta = { date: new Date().toISOString().slice(0, 10), tool: 'rg-seo-geo-skill 0.1.0' };
 
   if (o.src) {
     const r = runNextAudit({ src: o.src }, c, log);

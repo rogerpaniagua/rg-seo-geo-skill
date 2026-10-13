@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Collector } from '../skills/seo-geo-audit/scripts/lib/collector.mjs';
-import { runUrlAudit } from '../skills/seo-geo-audit/scripts/lib/url-checks.mjs';
-import { runNextAudit } from '../skills/seo-geo-audit/scripts/lib/next-checks.mjs';
-import { buildReport, toHtml, toMarkdown } from '../skills/seo-geo-audit/scripts/lib/report.mjs';
+import { Collector } from '../skills/rg-seo-geo-skill/scripts/lib/collector.mjs';
+import { runUrlAudit } from '../skills/rg-seo-geo-skill/scripts/lib/url-checks.mjs';
+import { runNextAudit } from '../skills/rg-seo-geo-skill/scripts/lib/next-checks.mjs';
+import { buildReport, toHtml, toMarkdown } from '../skills/rg-seo-geo-skill/scripts/lib/report.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const status = (results, id) => results.find((r) => r.id === id)?.status;
@@ -119,8 +119,8 @@ test('reports render in both languages without throwing', () => {
   }
 });
 
-import { detectStack } from '../skills/seo-geo-audit/scripts/lib/stack.mjs';
-import { validateLinks } from '../skills/seo-geo-audit/scripts/lib/report.mjs';
+import { detectStack } from '../skills/rg-seo-geo-skill/scripts/lib/stack.mjs';
+import { validateLinks } from '../skills/rg-seo-geo-skill/scripts/lib/report.mjs';
 
 test('no sitemap: discovers pages through internal links, small site is a warning not a failure', async () => {
   const { s, base } = await serve((req, res) => {
@@ -187,7 +187,7 @@ test('fetchUrl retries a 429 and honours Retry-After', async () => {
     if (hits === 1) { res.statusCode = 429; res.setHeader('retry-after', '0'); return res.end('slow down'); }
     res.setHeader('content-type', 'text/html'); res.end('<html>ok</html>');
   });
-  const { fetchUrl } = await import('../skills/seo-geo-audit/scripts/lib/net.mjs');
+  const { fetchUrl } = await import('../skills/rg-seo-geo-skill/scripts/lib/net.mjs');
   const r = await fetchUrl(base + '/', { allowLocal: true });
   s.close();
   assert.equal(r.status, 200);

@@ -9,7 +9,7 @@ Una skill de [Claude Code](https://claude.com/claude-code) y CLI sin dependencia
 La mayoría de herramientas califican páginas con un LLM (no reproducible) o repiten consejos sin evidencia. Esta se basa en tres reglas:
 
 1. **Determinista.** Lee tus páginas como un rastreador y tus archivos de código. Misma entrada, misma salida.
-2. **Estándar transparente.** Los 61 checks viven en [`catalog.mjs`](skills/seo-geo-audit/scripts/lib/catalog.mjs), cada uno con nivel (bloqueante / importante / consejo), base (**oficial** / **medido** / **heurística**) y enlace a la fuente. [Lee el estándar](skills/seo-geo-audit/references/standard.es.md).
+2. **Estándar transparente.** Los 61 checks viven en [`catalog.mjs`](skills/rg-seo-geo-skill/scripts/lib/catalog.mjs), cada uno con nivel (bloqueante / importante / consejo), base (**oficial** / **medido** / **heurística**) y enlace a la fuente. [Lee el estándar](skills/rg-seo-geo-skill/references/standard.es.md).
 3. **Honesta con GEO.** Las heurísticas están etiquetadas y nunca bloquean un lanzamiento. llms.txt es solo informativo: Google dice que no tiene efecto en Search.
 
 A propósito **no hay un puntaje 0–100**. El veredicto sale de bloqueantes y fallas importantes.
@@ -20,13 +20,13 @@ Requiere Node 18+. Sin instalar nada.
 
 ```bash
 # cualquier sitio publicado
-node skills/seo-geo-audit/scripts/audit.mjs --url https://ejemplo.com
+node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com
 
 # un proyecto Next.js + su URL en vivo
-node skills/seo-geo-audit/scripts/audit.mjs --url https://ejemplo.com --src ../mi-sitio --out ./reporte
+node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com --src ../mi-sitio --out ./reporte
 
 # puerta de CI: código de salida 1 si hay bloqueantes
-node skills/seo-geo-audit/scripts/audit.mjs --url https://staging.ejemplo.com --fail-on blocker --quiet
+node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://staging.ejemplo.com --fail-on blocker --quiet
 ```
 
 Resultado: `report.html` (reporte para el equipo), `report.md`, `audit.json`.
@@ -34,10 +34,10 @@ Resultado: `report.html` (reporte para el equipo), `report.md`, `audit.json`.
 ## Úsala como skill de Claude Code
 
 ```bash
-cp -R skills/seo-geo-audit ~/.claude/skills/
+cp -R skills/rg-seo-geo-skill ~/.claude/skills/
 ```
 
-Luego pídele a Claude: *"audita el SEO y GEO de https://… y del proyecto en ~/code/mi-sitio"*. La skill ejecuta el script, explica la evidencia en tu idioma y propone correcciones ([`references/nextjs-fixes.md`](skills/seo-geo-audit/references/nextjs-fixes.md)).
+Luego pídele a Claude: *"audita el SEO y GEO de https://… y del proyecto en ~/code/mi-sitio"*. La skill ejecuta el script, explica la evidencia en tu idioma y propone correcciones ([`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md)).
 
 ## Qué no hace
 

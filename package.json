@@ -5,10 +5,10 @@
   "type": "module",
   "license": "MIT",
   "engines": { "node": ">=18" },
-  "bin": { "seo-geo-audit": "skills/seo-geo-audit/scripts/audit.mjs" },
+  "bin": { "rg-seo-geo-skill": "skills/rg-seo-geo-skill/scripts/audit.mjs" },
   "scripts": {
     "test": "node --test test/",
-    "audit": "node skills/seo-geo-audit/scripts/audit.mjs",
+    "audit": "node skills/rg-seo-geo-skill/scripts/audit.mjs",
     "docs": "node scripts/gen-standard.mjs"
   },
   "keywords": ["seo", "geo", "aeo", "claude-code", "skill", "nextjs", "audit"]

@@ -1,7 +1,7 @@
-// Generates skills/seo-geo-audit/references/standard.{es,en}.md from the catalog,
+// Generates skills/rg-seo-geo-skill/references/standard.{es,en}.md from the catalog,
 // so the human-readable standard can never drift from what the audit enforces.
 import fs from 'node:fs';
-import { CHECKS, CATEGORIES } from '../skills/seo-geo-audit/scripts/lib/catalog.mjs';
+import { CHECKS, CATEGORIES } from '../skills/rg-seo-geo-skill/scripts/lib/catalog.mjs';
 
 const T = {
   en: {
@@ -32,6 +32,6 @@ for (const lang of ['es', 'en']) {
       out.push('');
     }
   }
-  fs.writeFileSync(new URL(`../skills/seo-geo-audit/references/standard.${lang}.md`, import.meta.url), out.join('\n'));
+  fs.writeFileSync(new URL(`../skills/rg-seo-geo-skill/references/standard.${lang}.md`, import.meta.url), out.join('\n'));
 }
 console.log(`Generated standard for ${CHECKS.length} checks.`);

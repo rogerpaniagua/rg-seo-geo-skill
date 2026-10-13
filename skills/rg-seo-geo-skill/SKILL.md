@@ -1,5 +1,5 @@
 ---
-name: seo-geo-audit
+name: rg-seo-geo-skill
 description: Use when someone asks to audit, evaluate, review or improve the SEO or GEO/AEO (AI-search visibility) of a website or project, to check metadata, Open Graph, sitemap, robots.txt, canonical, structured data or AI-crawler access, or to decide whether a site is ready to launch. Also in Spanish - evalúa, audita o revisa esta página, informe de calidad SEO/GEO. Works on any URL; inspects Next.js source.
 ---
 

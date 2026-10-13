@@ -10,7 +10,7 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import zlib from 'node:zlib';
 
-export const DEFAULT_UA = 'Mozilla/5.0 (compatible; seo-geo-audit/0.1; +https://github.com/rogerpaniagua/rg-seo-geo-skill)';
+export const DEFAULT_UA = 'Mozilla/5.0 (compatible; rg-seo-geo-skill/0.1; +https://github.com/rogerpaniagua/rg-seo-geo-skill)';
 
 export function isPrivateIp(ip) {
   if (net.isIPv4(ip)) {

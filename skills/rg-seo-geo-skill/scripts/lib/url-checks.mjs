@@ -271,7 +271,7 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   }
 
   // ---- 7. Soft 404 ----
-  const probe = `${origin}/__seo-geo-audit-${Math.random().toString(36).slice(2, 8)}`;
+  const probe = `${origin}/__rg-seo-geo-skill-${Math.random().toString(36).slice(2, 8)}`;
   const nf = await fetchUrl(probe, { ...net_ });
   c.add('crawl.soft-404', nf.status === 404 || nf.status === 410 ? 'pass' : 'fail',
     nf.error ? nf.error : `Unknown URL returned HTTP ${nf.status}${nf.status === 200 ? ' (soft 404)' : ''}`);
