@@ -88,3 +88,11 @@ test('--build and --url are mutually exclusive; --build needs a directory', asyn
   const c = await run(['--build', path.join(os.tmpdir(), 'definitely-not-here-xyz'), '--out', os.tmpdir()]);
   assert.equal(c.code, 2);
 });
+
+test('build reports state that hosting rules are not applied', async () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'build-note-'));
+  const r = await run(['--build', SITE, '--out', out, '--pages', '2']);
+  assert.equal(r.code, 0, r.o);
+  assert.match(fs.readFileSync(path.join(out, 'report.html'), 'utf8'), /Hosting rules/);
+  assert.match(fs.readFileSync(path.join(out, 'report.md'), 'utf8'), /Hosting rules/);
+});

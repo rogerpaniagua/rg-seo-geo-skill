@@ -77,7 +77,7 @@ This tool visits URLs it does not control and parses documents written by strang
 - **Files:** `--out` never writes through a symlink; `--compare` files are untrusted data; `--src` never follows symlinks; shared reports contain no absolute local paths.
 - **No third parties:** only the audited site is contacted. Project code is never executed.
 
-Known limits: a hardlink placed inside a build folder by someone with local access to the machine is served like any file. If you audit a folder you do not trust, do it in a disposable environment.
+Known limits: `--build` serves the compiled files only. Hosting rules (rewrites, redirects, headers, edge logic) are not applied, so URLs your host serves through them show up as 404, and HTTPS and bot access are not evaluated; the report says so, and the deployed site should be audited again after publishing. A hardlink placed inside a build folder by someone with local access to the machine is served like any file. If you audit a folder you do not trust, do it in a disposable environment.
 
 ## Development
 

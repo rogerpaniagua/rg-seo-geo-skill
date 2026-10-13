@@ -16,7 +16,7 @@ node scripts/audit.mjs --url <site> [--src <project-dir>] --out ./seo-geo-report
 ```
 
 - `--url` accepts a bare domain. Add `--src` only for a Next.js App Router project; any other stack is audited through its URL.
-- **Before deploying, any stack:** `--build <folder>` audits the compiled output (`dist`, `out`, `public`, `_site`, `build`) through a local server. Production URLs inside the build are mapped to the local copy.
+- **Before deploying, any stack:** `--build <folder>` audits the compiled output (`dist`, `out`, `public`, `_site`, `build`) through a local server. Production URLs inside the build are mapped to the local copy. Hosting rules (rewrites, redirects, headers) are not applied, so tell the user that a 404 for a rewritten URL may be an artefact, and to re-audit the deployed site.
 - **Progress over time:** `--compare auto` (or `--compare <old audit.json>`) adds a "Progress" section to the report. Use it whenever an earlier audit of the same site exists.
 - A local dev server can be audited with `--allow-local`; it only reaches that one origin.
 - Run `node scripts/audit.mjs --help` for the other flags (`--pages`, `--lang`, `--fail-on` for CI).

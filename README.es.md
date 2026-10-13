@@ -64,7 +64,7 @@ Esta herramienta visita URLs que no controla y lee documentos escritos por desco
 - **Archivos:** `--out` nunca escribe a través de un symlink; los archivos de `--compare` se tratan como datos no confiables; `--src` no sigue symlinks; los reportes compartibles no contienen rutas locales absolutas.
 - **Sin terceros:** solo se contacta el sitio auditado. Nunca se ejecuta código del proyecto.
 
-Límite conocido: un hardlink colocado dentro de una carpeta de build por alguien con acceso local a la máquina se sirve como cualquier archivo. Si auditas una carpeta en la que no confías, hazlo en un entorno desechable.
+Límite conocido: `--build` sirve solo los archivos compilados. Las reglas del hosting (rewrites, redirecciones, cabeceras, lógica en el edge) no se aplican, así que las URLs que tu hosting sirve mediante ellas salen como 404, y no se evalúan HTTPS ni el acceso de bots; el reporte lo indica y conviene auditar de nuevo el sitio publicado tras desplegar. Un hardlink colocado dentro de una carpeta de build por alguien con acceso local a la máquina se sirve como cualquier archivo. Si auditas una carpeta en la que no confías, hazlo en un entorno desechable.
 
 ## Desarrollo
 
