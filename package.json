@@ -11,7 +11,7 @@
     "rg-seo-geo-skill": "skills/rg-seo-geo-skill/scripts/audit.mjs"
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.mjs",
     "audit": "node skills/rg-seo-geo-skill/scripts/audit.mjs",
     "docs": "node scripts/gen-standard.mjs",
     "corpus": "node scripts/corpus.mjs",
