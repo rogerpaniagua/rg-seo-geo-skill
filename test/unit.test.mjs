@@ -99,3 +99,22 @@ for (const [enc, compress] of [['gzip', zlib.gzipSync], ['br', zlib.brotliCompre
     assert.ok(Date.now() - t0 < 5000, 'must resolve promptly');
   });
 }
+
+import { sameSite } from '../skills/rg-seo-geo-skill/scripts/lib/url-checks.mjs';
+test('sameSite groups subdomains of the same registrable domain', () => {
+  assert.ok(sameSite('en.wikipedia.org', 'www.wikipedia.org'));
+  assert.ok(sameSite('www.bbc.co.uk', 'news.bbc.co.uk'));
+  assert.ok(sameSite('example.com', 'www.example.com'));
+  assert.ok(!sameSite('example.com', 'example.org'));
+  assert.ok(!sameSite('a.co.uk', 'b.co.uk'));
+});
+
+import { httpsVerdict } from '../skills/rg-seo-geo-skill/scripts/lib/url-checks.mjs';
+test('http→https verdict: only claim "no redirect" when HTTP really serves content', () => {
+  assert.equal(httpsVerdict({ error: 'ECONNREFUSED', status: 0 }).status, 'pass');
+  assert.equal(httpsVerdict({ status: 200, finalUrl: 'https://a.com/' }).status, 'pass');          // redirected to https
+  assert.equal(httpsVerdict({ status: 200, finalUrl: 'http://a.com/' }).status, 'fail');           // served over plain http
+  assert.equal(httpsVerdict({ status: 403, finalUrl: 'http://a.com/' }).status, 'skip');           // bot protection (DataDome on elpais.com)
+  assert.equal(httpsVerdict({ status: 429, finalUrl: 'http://a.com/' }).status, 'skip');
+  assert.equal(httpsVerdict({ status: 503, finalUrl: 'http://a.com/' }).status, 'skip');
+});

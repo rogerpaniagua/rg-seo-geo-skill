@@ -56,6 +56,10 @@ Then ask Claude: *"audit the SEO and GEO of https://… and the project in ~/cod
 
 It cannot judge content quality, search intent, E-E-A-T, backlinks or real-user data, and it does not predict AI citations. It does not measure performance either: the report links to PageSpeed Insights, Search Console, the Rich Results Test and the sharing debuggers, pre-filled with your URL. It reads the HTML the server sends and does not run JavaScript; client-rendered pages are flagged in the report. Source mode reads files with regular expressions; unusual project layouts may be skipped (reported as *not evaluated*).
 
+## Calibrated on real sites
+
+The checks are tuned against a corpus of 27 real sites ([`test/corpus.txt`](test/corpus.txt)): WordPress, Shopify, Wix, Webflow, Next.js, Astro, Nuxt, SvelteKit, Laravel, Django, news sites behind bot protection, and more. Running it found real bugs (a crash on a 118k-URL sitemap, 16 KB response headers, bot-protection 403s read as site errors) and checks that were stricter than Google itself (missing canonical, H1 or JSON-LD are not requirements). Each became a regression test. Run it yourself with `npm run corpus`.
+
 ## Security
 
 The tool fetches URLs you give it, so it blocks private, loopback and link-local addresses by default (checked at connect time to resist DNS rebinding) and re-validates every redirect hop. `--allow-local` is required to audit a local dev server. It never executes project code. It makes no third-party calls: only your site is contacted.
@@ -64,6 +68,7 @@ The tool fetches URLs you give it, so it blocks private, loopback and link-local
 
 ```bash
 npm test          # unit + integration tests (local fixture servers, Next.js fixtures)
+npm run corpus    # audit the real-world corpus and list the most frequent findings (find false positives)
 npm run docs      # regenerate references/standard.*.md from the catalog
 ```
 

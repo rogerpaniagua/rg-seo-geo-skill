@@ -4,12 +4,25 @@
   "description": "A Claude Code skill and zero-dependency CLI that audits SEO and AI-search (GEO) quality for any website, with deep checks for Next.js projects.",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=18" },
-  "bin": { "rg-seo-geo-skill": "skills/rg-seo-geo-skill/scripts/audit.mjs" },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "rg-seo-geo-skill": "skills/rg-seo-geo-skill/scripts/audit.mjs"
+  },
   "scripts": {
     "test": "node --test test/",
     "audit": "node skills/rg-seo-geo-skill/scripts/audit.mjs",
-    "docs": "node scripts/gen-standard.mjs"
+    "docs": "node scripts/gen-standard.mjs",
+    "corpus": "node scripts/corpus.mjs"
   },
-  "keywords": ["seo", "geo", "aeo", "claude-code", "skill", "nextjs", "audit"]
+  "keywords": [
+    "seo",
+    "geo",
+    "aeo",
+    "claude-code",
+    "skill",
+    "nextjs",
+    "audit"
+  ]
 }

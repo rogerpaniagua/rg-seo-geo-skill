@@ -132,7 +132,7 @@ export const CHECKS = [
   {
     id: 'crawl.canonical', category: 'crawl', tier: 'important', basis: 'official', mode: 'url',
     title: { en: 'Canonical URL is declared, absolute and self-referencing', es: 'La URL canónica está declarada, es absoluta y apunta a sí misma' },
-    why: { en: 'Prevents duplicate-URL dilution (parameters, trailing slash, host).', es: 'Evita duplicados por parámetros, barra final o host.' },
+    why: { en: 'Prevents duplicate-URL dilution (parameters, trailing slash, host). A missing canonical is a recommendation gap (warning). A deep page whose canonical points at the homepage is a failure: it tells Google the page is a duplicate of the home. A canonical pointing to another specific page can be intentional consolidation (warning).', es: 'Evita duplicados por parámetros, barra final o host. Un canonical ausente es una recomendación pendiente (advertencia). Una página interna cuyo canonical apunta a la home es una falla: le dice a Google que es un duplicado de la home. Un canonical hacia otra página concreta puede ser consolidación intencional (advertencia).' },
     fix: { en: 'Add <link rel="canonical"> with the absolute page URL (Next.js: alternates.canonical).', es: 'Agrega <link rel="canonical"> con la URL absoluta (Next.js: alternates.canonical).' },
     source: `${G}/crawling-indexing/consolidate-duplicate-urls`,
   },
@@ -162,7 +162,7 @@ export const CHECKS = [
   {
     id: 'meta.description', category: 'metadata', tier: 'important', basis: 'official', mode: 'url',
     title: { en: 'Every page has a meta description', es: 'Cada página tiene meta description' },
-    why: { en: 'Google often uses it as the result snippet.', es: 'Google la usa con frecuencia como fragmento del resultado.' },
+    why: { en: 'Google often uses it as the result snippet. It is optional (Google generates snippets otherwise), so a missing description is a failure on the homepage and a warning on secondary pages.', es: 'Google la usa con frecuencia como fragmento del resultado. Es opcional (Google genera fragmentos si falta), por eso es una falla en la home y una advertencia en páginas secundarias.' },
     fix: { en: 'Write a unique 70–160 character summary per page.', es: 'Escribe un resumen único de 70–160 caracteres por página.' },
     source: `${G}/appearance/snippet`,
   },
@@ -174,9 +174,9 @@ export const CHECKS = [
     source: `${G}/appearance/snippet`,
   },
   {
-    id: 'meta.h1', category: 'metadata', tier: 'important', basis: 'measured', mode: 'url',
+    id: 'meta.h1', category: 'metadata', tier: 'advice', basis: 'measured', mode: 'url',
     title: { en: 'Each page has exactly one <h1>', es: 'Cada página tiene exactamente un <h1>' },
-    why: { en: 'A single H1 states the page topic for users, assistive tech and parsers.', es: 'Un solo H1 declara el tema para usuarios, accesibilidad y parsers.' },
+    why: { en: 'A single H1 states the page topic for users, assistive tech and parsers. Google does not require it, and several well-run sites omit it on some pages, so this is advice, not a requirement.', es: 'Un solo H1 declara el tema para usuarios, accesibilidad y parsers. Google no lo exige y varios sitios bien hechos lo omiten en algunas páginas, por eso es un consejo y no un requisito.' },
     fix: { en: 'Use one H1 that matches the page intent.', es: 'Usa un H1 que refleje la intención de la página.' },
     source: `${G}/fundamentals/seo-starter-guide`,
   },
@@ -234,9 +234,9 @@ export const CHECKS = [
 
   // ---------- Structured data ----------
   {
-    id: 'schema.present', category: 'schema', tier: 'important', basis: 'official', mode: 'url',
+    id: 'schema.present', category: 'schema', tier: 'advice', basis: 'official', mode: 'url',
     title: { en: 'Homepage has JSON-LD structured data', es: 'La home tiene datos estructurados JSON-LD' },
-    why: { en: 'Structured data tells machines what the page is about and who is behind it.', es: 'Los datos estructurados dicen a las máquinas de qué trata la página y quién está detrás.' },
+    why: { en: 'Structured data tells machines what the page is about and who is behind it. Google only requires it for rich-result eligibility, so a site without it is not broken; it is an opportunity (identity for AI answers, rich results).', es: 'Los datos estructurados dicen a las máquinas de qué trata la página y quién está detrás. Google solo lo exige para ser elegible a resultados enriquecidos, así que un sitio sin ellos no está roto: es una oportunidad (identidad para respuestas de IA, resultados enriquecidos).' },
     fix: { en: 'Add Organization / Person / WebSite JSON-LD.', es: 'Agrega JSON-LD de Organization / Person / WebSite.' },
     source: `${G}/appearance/structured-data/intro-structured-data`,
   },

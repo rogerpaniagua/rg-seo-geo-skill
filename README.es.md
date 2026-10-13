@@ -43,6 +43,10 @@ Luego pídele a Claude: *"audita el SEO y GEO de https://… y del proyecto en ~
 
 No juzga calidad de contenido, intención de búsqueda, E-E-A-T, backlinks ni datos de usuarios reales, y no predice citas de IA. Tampoco mide rendimiento: el reporte enlaza a PageSpeed Insights, Search Console, Rich Results Test y los depuradores de compartir, ya cargados con tu URL. Lee el HTML que envía el servidor y no ejecuta JavaScript; las páginas que se renderizan en el navegador se marcan en el reporte. El modo código lee archivos con expresiones regulares; estructuras inusuales pueden quedar como *no evaluadas*.
 
+## Calibrada con sitios reales
+
+Los checks están ajustados contra un corpus de 27 sitios reales ([`test/corpus.txt`](test/corpus.txt)): WordPress, Shopify, Wix, Webflow, Next.js, Astro, Nuxt, SvelteKit, Laravel, Django, medios con protección anti-bots y más. Esa prueba encontró bugs reales (un crash con un sitemap de 118 mil URLs, cabeceras de 16 KB, bloqueos anti-bots leídos como errores del sitio) y checks más estrictos que el propio Google (canonical, H1 o JSON-LD ausentes no son requisitos). Cada hallazgo quedó como prueba de regresión. Ejecútala con `npm run corpus`.
+
 ## Seguridad
 
 La herramienta consulta las URLs que le das, por eso bloquea por defecto direcciones privadas, loopback y link-local (verificado al conectar, para resistir DNS rebinding) y revalida cada redirección. Para auditar un servidor local necesitas `--allow-local`. Nunca ejecuta código del proyecto. No hace llamadas a terceros: solo contacta tu sitio.
@@ -51,6 +55,7 @@ La herramienta consulta las URLs que le das, por eso bloquea por defecto direcci
 
 ```bash
 npm test        # pruebas unitarias e integración
+npm run corpus  # audita el corpus real y lista los hallazgos más frecuentes (detecta falsos positivos)
 npm run docs    # regenera references/standard.*.md desde el catálogo
 ```
 

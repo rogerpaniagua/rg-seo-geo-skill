@@ -69,7 +69,7 @@ test('URL audit: broken site is flagged', async () => {
   assert.equal(status(r, 'meta.title'), 'fail');
   assert.equal(status(r, 'meta.lang'), 'fail');
   assert.equal(status(r, 'meta.viewport'), 'fail');
-  assert.equal(status(r, 'crawl.canonical'), 'fail');
+  assert.equal(status(r, 'crawl.canonical'), 'warn');   // missing canonical is a recommendation gap, not a failure
   assert.equal(status(r, 'content.server-rendered'), 'fail');
   assert.equal(status(r, 'schema.present'), 'fail');
   assert.equal(buildReport(r, { date: 'x' }, 'en').verdict, 'not-ready');
@@ -235,4 +235,145 @@ test('16:9 share images are accepted; legal pages are not asked for author/date'
   const r = c.results();
   assert.equal(status(r, 'social.og-image-size'), 'pass');
   assert.equal(r.find((x) => x.id === 'geo.freshness-author'), undefined);   // og:type=article alone is not enough
+});
+
+// ---- calibration from the 27-site corpus (test/corpus.txt) ----
+import { CHECK_BY_ID } from '../skills/rg-seo-geo-skill/scripts/lib/catalog.mjs';
+
+async function auditPages(handler, opts = {}) {
+  const { s, base } = await serve((req, res) => handler(req, res, base_()));
+  function base_() { return `http://127.0.0.1:${s.address().port}`; }
+  const c = new Collector();
+  let out;
+  try { out = await runUrlAudit({ url: base + '/', allowLocal: true, maxPages: 4, ...opts }, c); } finally { s.close(); }
+  return { c, out, r: c.results(), base };
+}
+const html = (head = '', body = '<h1>Hello</h1><p>' + 'word '.repeat(120) + '</p><a href="/x">x</a>') =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A reasonable page title</title>${head}</head><body>${body}</body></html>`;
+
+test('very large response headers (webflow.com sends ~16.5 KB) do not break the audit', async () => {
+  const { fetchUrl } = await import('../skills/rg-seo-geo-skill/scripts/lib/net.mjs');
+  const { s, base } = await serve((req, res) => { res.setHeader('x-big', 'a'.repeat(20_000)); res.setHeader('content-type', 'text/plain'); res.end('ok'); });
+  const r = await fetchUrl(base + '/', { allowLocal: true });
+  s.close();
+  assert.equal(r.status, 200, r.error);
+});
+
+test('bot protection (403) on the homepage is "could not audit", never a site blocker', async () => {
+  const { c, out } = await auditPages((req, res) => { res.statusCode = 403; res.end('Access denied'); });
+  assert.equal(out.aborted, true);
+  const pageOk = c.results().find((x) => x.id === 'crawl.page-ok');
+  assert.equal(pageOk.status, 'skip');
+  assert.match(pageOk.evidence.join(' '), /automated|refused/i);
+  assert.equal(buildReport(c.results(), { date: 'x' }, 'en').verdict, 'incomplete');
+});
+
+test('non-HTML URLs (markdown, plain text) are skipped, not failed for missing viewport/canonical', async () => {
+  const { r } = await auditPages((req, res, base) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end(`User-agent: *\nAllow: /\nSitemap: ${base}/sitemap.xml`); }
+    if (req.url === '/sitemap.xml') { res.setHeader('content-type', 'application/xml'); return res.end(`<urlset><url><loc>${base}/</loc></url><url><loc>${base}/SKILL.md</loc></url></urlset>`); }
+    if (req.url === '/SKILL.md') { res.setHeader('content-type', 'text/plain; charset=utf-8'); return res.end('# a markdown file'); }
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    res.statusCode = 404; res.end('nf');
+  });
+  assert.notEqual(status(r, 'meta.viewport'), 'fail');
+  assert.notEqual(status(r, 'crawl.canonical'), 'fail');
+  assert.match(r.find((x) => x.id === 'crawl.page-ok').evidence.join(' '), /not an HTML page/);
+});
+
+test('canonical: missing is a warning; pointing a deep page at the homepage is a failure; pointing elsewhere is a warning', async () => {
+  const pageWith = (canon) => html(canon ? `<link rel="canonical" href="${canon}">` : '');
+  const run = async (canonFor) => (await auditPages((req, res, base) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end(`Sitemap: ${base}/sitemap.xml`); }
+    if (req.url === '/sitemap.xml') { res.setHeader('content-type', 'application/xml'); return res.end(`<urlset><url><loc>${base}/</loc></url><url><loc>${base}/docs/a</loc></url></urlset>`); }
+    if (req.url === '/' || req.url === '/docs/a') { res.setHeader('content-type', 'text/html'); return res.end(pageWith(canonFor(req.url, base))); }
+    res.statusCode = 404; res.end('nf');
+  })).r;
+  assert.equal(status(await run(() => null), 'crawl.canonical'), 'warn');
+  assert.equal(status(await run((u, b) => (u === '/' ? b + '/' : b + '/')), 'crawl.canonical'), 'fail');         // deep page -> home
+  assert.equal(status(await run((u, b) => (u === '/' ? b + '/' : b + '/docs/other')), 'crawl.canonical'), 'warn'); // consolidation elsewhere
+  assert.equal(status(await run((u, b) => b + u), 'crawl.canonical'), 'pass');
+});
+
+test('missing description: failure on the homepage, warning on secondary pages', async () => {
+  const mk = (homeDesc) => auditPages((req, res, base) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end(`Sitemap: ${base}/sitemap.xml`); }
+    if (req.url === '/sitemap.xml') { res.setHeader('content-type', 'application/xml'); return res.end(`<urlset><url><loc>${base}/</loc></url><url><loc>${base}/docs</loc></url></urlset>`); }
+    res.setHeader('content-type', 'text/html');
+    const d = '<meta name="description" content="' + 'A good description. '.repeat(5) + '">';
+    if (req.url === '/') return res.end(html(homeDesc ? d : ''));
+    if (req.url === '/docs') return res.end(html(''));
+    res.statusCode = 404; res.end('nf');
+  });
+  assert.equal(status((await mk(true)).r, 'meta.description'), 'warn');
+  assert.equal(status((await mk(false)).r, 'meta.description'), 'fail');
+});
+
+test('tiny static pages are not "client-rendered" failures; empty JS shells are', async () => {
+  const tiny = await auditPages((req, res) => { res.setHeader('content-type', 'text/html'); res.end(html('', '<h1>Hi</h1><p>A tiny but real page.</p><a href="/x">x</a>')); });
+  assert.equal(status(tiny.r, 'content.server-rendered'), 'warn');
+  const shell = await auditPages((req, res) => { res.setHeader('content-type', 'text/html'); res.end(html('', '<div id="root"></div><script src="/b.js"></script>')); });
+  assert.equal(status(shell.r, 'content.server-rendered'), 'fail');
+});
+
+test('sitemap discovery tries common locations when robots.txt lists none', async () => {
+  const { r } = await auditPages((req, res, base) => {
+    if (req.url === '/sitemap_index.xml') { res.setHeader('content-type', 'application/xml'); return res.end(`<urlset><url><loc>${base}/</loc></url></urlset>`); }
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    res.statusCode = 404; res.end('nf');
+  });
+  assert.equal(status(r, 'crawl.sitemap-valid'), 'pass');
+});
+
+test('calibrated tiers: things Google does not require are not "important"', () => {
+  assert.equal(CHECK_BY_ID.get('meta.h1').tier, 'advice');
+  assert.equal(CHECK_BY_ID.get('schema.present').tier, 'advice');
+});
+
+// ---- regressions from the corpus run #2 ----
+test('huge sitemaps (150k URLs, e.g. webflow.com) do not overflow the stack', async () => {
+  const urls = Array.from({ length: 150_000 }, (_, i) => `<url><loc>__B__/p/${i}</loc></url>`).join('');
+  const { r } = await auditPages((req, res, base) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end(`Sitemap: ${base}/sitemap.xml`); }
+    if (req.url === '/sitemap.xml') { res.setHeader('content-type', 'application/xml'); return res.end(`<urlset>${urls.replaceAll('__B__', base)}</urlset>`); }
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    res.statusCode = 404; res.end('nf');
+  }, { maxPages: 2 });
+  assert.equal(status(r, 'crawl.sitemap-valid'), 'pass');
+  assert.equal(status(r, 'crawl.sitemap-limits'), 'fail');   // 150k > 50,000
+});
+
+test('robots.txt that blocks AI search bots is a policy warning, not a failure', async () => {
+  const { r } = await auditPages((req, res) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end('User-agent: PerplexityBot\nDisallow: /\n\nUser-agent: *\nAllow: /'); }
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    res.statusCode = 404; res.end('nf');
+  });
+  const x = r.find((y) => y.id === 'geo.search-bots');
+  assert.equal(x.status, 'warn');
+  assert.match(x.evidence.join(' '), /PerplexityBot/);
+});
+
+test('sitemap URLs: another domain is a failure', async () => {
+  const run = (loc) => auditPages((req, res, base) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end(`Sitemap: ${base}/sitemap.xml`); }
+    if (req.url === '/sitemap.xml') { res.setHeader('content-type', 'application/xml'); return res.end(`<urlset><url><loc>${base}/</loc></url><url><loc>${loc}</loc></url></urlset>`); }
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    res.statusCode = 404; res.end('nf');
+  }, { maxPages: 1 });
+  assert.equal(status((await run('http://other.example.org/x')).r, 'crawl.sitemap-urls'), 'fail');
+});
+
+test('sitemap limit is per file: an index of several files totalling >50k URLs is fine', async () => {
+  const child = (base, n, off) => `<urlset>${Array.from({ length: n }, (_, i) => `<url><loc>${base}/p/${off + i}</loc></url>`).join('')}</urlset>`;
+  const { r } = await auditPages((req, res, base) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end(`Sitemap: ${base}/sitemap.xml`); }
+    res.setHeader('content-type', 'application/xml');
+    if (req.url === '/sitemap.xml') return res.end(`<sitemapindex><sitemap><loc>${base}/s1.xml</loc></sitemap><sitemap><loc>${base}/s2.xml</loc></sitemap></sitemapindex>`);
+    if (req.url === '/s1.xml') return res.end(child(base, 30_000, 0));
+    if (req.url === '/s2.xml') return res.end(child(base, 30_000, 30_000));
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    res.statusCode = 404; res.end('nf');
+  }, { maxPages: 1 });
+  assert.equal(status(r, 'crawl.sitemap-limits'), 'pass', JSON.stringify(r.find((x) => x.id === 'crawl.sitemap-limits')));
 });

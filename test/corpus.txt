@@ -1,0 +1,30 @@
+# Real-world corpus used to catch false positives. One URL per line; '#' starts a comment.
+# Chosen to cover: different stacks, SSR/CSR/static, CMS and site builders, bot protection,
+# non-English content, huge and tiny sites, no-sitemap sites, and our own sites.
+https://rogerpaniagua.com
+https://elaniin.com
+https://nextjs.org
+https://vercel.com
+https://astro.build
+https://svelte.dev
+https://nuxt.com
+https://react.dev
+https://vuejs.org
+https://laravel.com
+https://www.djangoproject.com
+https://rubyonrails.org
+https://wordpress.org
+https://ghost.org
+https://www.shopify.com
+https://webflow.com
+https://www.squarespace.com
+https://www.wix.com
+https://github.com
+https://www.mozilla.org
+https://www.wikipedia.org
+https://www.bbc.com
+https://www.nytimes.com
+https://www.usa.gov
+https://elpais.com
+https://www.elsalvador.com
+https://example.com

@@ -74,7 +74,8 @@ function once(url, { method, headers, allowLocal, timeout, maxBytes, binary }) {
       if (req) req.destroy();
       if (err) reject(err); else resolve(value);
     };
-    req = lib.request(u, { method, headers, lookup: guardedLookup(allowLocal), timeout }, (res) => {
+    // maxHeaderSize: some sites (e.g. webflow.com) send >16 KB of headers, above Node's default limit.
+    req = lib.request(u, { method, headers, lookup: guardedLookup(allowLocal), timeout, maxHeaderSize: 128 * 1024 }, (res) => {
       let stream = res;
       const enc = String(res.headers['content-encoding'] || '').toLowerCase();
       if (enc === 'gzip') stream = res.pipe(zlib.createGunzip());

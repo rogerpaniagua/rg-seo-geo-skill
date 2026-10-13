@@ -19,6 +19,17 @@ const REQUIRED_PROPS = {
   Product: ['name'], BreadcrumbList: ['itemListElement'], FAQPage: ['mainEntity'],
 };
 
+const SECOND_LEVEL = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'gob', 'or', 'ne']);
+function registrable(host) {
+  const parts = host.toLowerCase().split('.');
+  if (parts.length <= 2) return host.toLowerCase();
+  const tld = parts[parts.length - 1];
+  const sld = parts[parts.length - 2];
+  return (tld.length === 2 && SECOND_LEVEL.has(sld) ? parts.slice(-3) : parts.slice(-2)).join('.');
+}
+/** True when two hosts belong to the same site (same registrable domain), e.g. en.wikipedia.org and www.wikipedia.org. */
+export function sameSite(a, b) { return registrable(a) === registrable(b); }
+
 const norm = (u) => {
   try {
     const x = new URL(u);
@@ -30,6 +41,17 @@ const norm = (u) => {
 };
 const types = (node) => [].concat(node['@type'] || []);
 const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
+
+/** Judge the plain-HTTP probe. Only a 2xx served over http:// is a real failure; a refusal (403 bot protection, 429, 5xx) proves nothing. */
+export function httpsVerdict(httpRes) {
+  if (httpRes.error) return { status: 'pass', evidence: 'HTTPS ok; plain HTTP not reachable' };
+  if (new URL(httpRes.finalUrl).protocol === 'https:') return { status: 'pass', evidence: 'HTTP redirects to HTTPS' };
+  if (httpRes.status >= 200 && httpRes.status < 300) return { status: 'fail', evidence: `http:// does not redirect to https:// (final ${httpRes.finalUrl})` };
+  return { status: 'skip', evidence: `could not verify: http:// answered HTTP ${httpRes.status} (often bot protection)` };
+}
+
+const contentType = (res) => String((res.headers && res.headers['content-type']) || '').split(';')[0].trim().toLowerCase();
+const isHtml = (res) => { const t = contentType(res); return !t || t === 'text/html' || t === 'application/xhtml+xml'; };
 
 async function pool(items, limit, fn) {
   const out = new Array(items.length);
@@ -67,6 +89,10 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   // ---- 1. Start page ----
   log(`Fetching ${start}`);
   const first = await fetchUrl(start, { ...net_ });
+  if (first.status === 401 || first.status === 403 || first.status === 451) {
+    c.add('crawl.page-ok', 'skip', `HTTP ${first.status}: the server refused automated access (bot protection, login or a regional block). This audit does not try to bypass that, so nothing can be concluded about the site.`);
+    return { aborted: true, meta: { url: start, error: `HTTP ${first.status} (automated access refused)` } };
+  }
   if (first.status === 429 || first.status === 503) {
     c.add('crawl.page-ok', 'skip', `HTTP ${first.status}: the server rate-limited or refused the audit even after retrying. This says nothing about the site; try again later.`);
     return { aborted: true, meta: { url: start, error: `HTTP ${first.status} (rate-limited)` } };
@@ -74,6 +100,10 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   if (first.error || first.status !== 200) {
     c.add('crawl.page-ok', 'fail', first.error ? first.error : `HTTP ${first.status} at ${first.finalUrl}`);
     return { aborted: true, meta: { url: start, error: first.error || `HTTP ${first.status}` } };
+  }
+  if (!isHtml(first)) {
+    c.add('crawl.page-ok', 'skip', `The URL returns ${contentType(first) || 'unknown content'}, not an HTML page, so page checks do not apply.`);
+    return { aborted: true, meta: { url: start, error: `not an HTML page (${contentType(first)})` } };
   }
   c.add('crawl.page-ok', 'pass', `HTTP 200 at ${first.finalUrl}`);
   const finalUrl = new URL(first.finalUrl);
@@ -90,10 +120,8 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   } else {
     if (finalUrl.protocol !== 'https:') c.add('crawl.https', 'fail', `Final URL is ${finalUrl.protocol}`);
     else {
-      const httpRes = await fetchUrl(`http://${finalUrl.host}/`, { ...net_ });
-      if (httpRes.error) c.add('crawl.https', 'pass', 'HTTPS ok; plain HTTP not reachable');
-      else if (new URL(httpRes.finalUrl).protocol === 'https:') c.add('crawl.https', 'pass', 'HTTP redirects to HTTPS');
-      else c.add('crawl.https', 'fail', `http:// does not redirect to https:// (final ${httpRes.finalUrl})`);
+      const v = httpsVerdict(await fetchUrl(`http://${finalUrl.host}/`, { ...net_ }));
+      c.add('crawl.https', v.status, v.evidence);
     }
     const h = finalUrl.hostname;
     const altHost = h.startsWith('www.') ? h.slice(4) : `www.${h}`;
@@ -119,28 +147,38 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   }
 
   // ---- 4. sitemap ----
-  const sitemapCandidates = robots.sitemaps.length ? robots.sitemaps : [`${origin}/sitemap.xml`];
+  const declared = robots.sitemaps.length > 0;
+  const sitemapCandidates = declared ? robots.sitemaps : ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml', '/sitemap-index.xml'].map((p) => origin + p);
   let sitemapUrls = [];
   let sitemapEntries = [];
   let sitemapRaw = '';
   const sitemapErrors = [];
-  for (const sm of sitemapCandidates.slice(0, 3)) {
+  let maxFileUrls = 0;   // the 50,000 URL / 50 MB limits apply to each sitemap FILE, not to the whole site
+  let maxFileBytes = 0;
+  for (const sm of sitemapCandidates.slice(0, declared ? 3 : 4)) {
+    if (!declared && sitemapEntries.length) break; // common locations: stop at the first that works
     const r = await fetchUrl(sm, { ...net_, maxBytes: 10_000_000 });
     if (r.error || r.status !== 200) { sitemapErrors.push(`${sm}: ${r.error || 'HTTP ' + r.status}`); continue; }
     const parsed = parseSitemap(r.body);
     if (!parsed.valid) { sitemapErrors.push(`${sm}: not a valid sitemap XML`); continue; }
     sitemapRaw = r.body;
     let entries = parsed.entries;
+    if (!parsed.isIndex) { maxFileUrls = Math.max(maxFileUrls, entries.length); maxFileBytes = Math.max(maxFileBytes, r.bytes); }
     if (parsed.isIndex) {
       const children = entries.slice(0, 5);
       entries = [];
       for (const ch of children) {
         const cr = await fetchUrl(ch.loc, { ...net_, maxBytes: 10_000_000 });
-        if (!cr.error && cr.status === 200) entries.push(...parseSitemap(cr.body).entries);
+        if (!cr.error && cr.status === 200) {
+          const childEntries = parseSitemap(cr.body).entries;
+          maxFileUrls = Math.max(maxFileUrls, childEntries.length);
+          maxFileBytes = Math.max(maxFileBytes, cr.bytes);
+          for (const e of childEntries) entries.push(e);
+        }
       }
     }
     c.add('crawl.sitemap-valid', entries.length ? 'pass' : 'warn', `${sm}: ${entries.length} URL(s)${parsed.isIndex ? ' (index)' : ''}`);
-    sitemapEntries.push(...entries);
+    for (const e of entries) sitemapEntries.push(e); // never spread: sitemaps can hold 100k+ URLs
   }
   sitemapUrls = sitemapEntries.map((e) => e.loc);
   const sitemapMissing = !sitemapEntries.length;
@@ -148,13 +186,19 @@ export async function runUrlAudit(opts, c, log = () => {}) {
 
   if (sitemapEntries.length) {
     const problems = [];
+    const soft = [];
     for (const e of sitemapEntries.slice(0, 2000)) {
       let u;
       try { u = new URL(e.loc); } catch { problems.push(`not absolute: ${e.loc}`); continue; }
       if (u.protocol !== 'https:' && !isLocalHost) problems.push(`not https: ${e.loc}`);
-      if (u.hostname !== finalUrl.hostname) problems.push(`other host (${u.hostname}): ${e.loc}`);
+      if (u.hostname !== finalUrl.hostname) {
+        // Google: a sitemap may only list URLs of its own host unless cross-submitted/verified.
+        // A sibling subdomain is usually deliberate (soft); another domain is a real problem.
+        (sameSite(u.hostname, finalUrl.hostname) ? soft : problems).push(`other host (${u.hostname}): ${e.loc}`);
+      }
     }
-    c.add('crawl.sitemap-limits', sitemapEntries.length <= 50000 ? 'pass' : 'fail', `${sitemapEntries.length} URLs, ${(sitemapRaw.length / 1e6).toFixed(2)} MB`);
+    c.add('crawl.sitemap-limits', maxFileUrls <= 50000 && maxFileBytes <= 50_000_000 ? 'pass' : 'fail',
+      `${sitemapEntries.length} URLs in total; largest single file: ${maxFileUrls} URLs, ${(maxFileBytes / 1e6).toFixed(2)} MB (limit per file: 50,000 URLs / 50 MB)`);
     const withMod = sitemapEntries.filter((e) => e.lastmod);
     if (withMod.length < 3) c.add('crawl.sitemap-lastmod', 'pass', withMod.length ? 'few lastmod values' : 'no lastmod (acceptable)');
     else {
@@ -174,7 +218,8 @@ export async function runUrlAudit(opts, c, log = () => {}) {
       else if (r.status >= 300 && r.status < 400) problems.push(`${r.u}: redirects (${r.status}) to ${r.loc}`);
       else if (r.status !== 200) problems.push(`${r.u}: HTTP ${r.status}`);
     }
-    c.add('crawl.sitemap-urls', problems.length ? 'fail' : 'pass', problems.length ? problems.slice(0, 5).join(' | ') : `${results.length} sampled URLs return 200 on the right host`);
+    const all = [...problems, ...soft.slice(0, 3).map((x) => `${x} (sibling subdomain: valid only if verified together in Search Console)`)];
+    c.add('crawl.sitemap-urls', problems.length ? 'fail' : soft.length ? 'warn' : 'pass', all.length ? all.slice(0, 5).join(' | ') : `${results.length} sampled URLs return 200 on the right host`);
   } else {
     c.add('crawl.sitemap-urls', 'skip', 'no sitemap URLs');
     c.add('crawl.sitemap-limits', 'skip', 'no sitemap');
@@ -210,17 +255,22 @@ export async function runUrlAudit(opts, c, log = () => {}) {
   log(`Auditing ${pageUrls.length} page(s)${discovered ? ' (discovered through internal links, no sitemap)' : ''}`);
   const pages = await pool(pageUrls, 2, async (u, i) => {
     const res = i === 0 ? first : await fetchUrl(u, { ...net_ });
-    return { url: u, res, parsed: res.body ? parseHtml(res.body) : null, isHome: i === 0 };
+    return { url: u, res, parsed: res.body && isHtml(res) ? parseHtml(res.body) : null, isHome: i === 0 };
   });
 
   const titles = new Map();
   const descs = new Map();
   for (const p of pages) {
     const scope = pages.length > 1 ? pathOf(p.url) || '/' : '';
+    if (p.res.status === 200 && !isHtml(p.res)) { c.add('crawl.page-ok', 'skip', `not an HTML page (${contentType(p.res)}); page checks skipped`, scope); continue; }
     if (!p.parsed || p.res.status !== 200) {
       if (!p.isHome) {
         const limited = p.res.status === 429 || p.res.status === 503;
-        c.add('crawl.page-ok', limited ? 'skip' : 'fail', limited ? `HTTP ${p.res.status}: server rate-limited the audit (not a site error); re-run later or with --pages 3` : `HTTP ${p.res.status || p.res.error}`, scope);
+        const refused = p.res.status === 401 || p.res.status === 403 || p.res.status === 451;
+        c.add('crawl.page-ok', limited || refused ? 'skip' : 'fail',
+          limited ? `HTTP ${p.res.status}: server rate-limited the audit (not a site error); re-run later or with --pages 3`
+            : refused ? `HTTP ${p.res.status}: automated access refused (bot protection or login); not evaluated`
+              : `HTTP ${p.res.status || p.res.error}`, scope);
       }
       continue;
     }
@@ -281,7 +331,7 @@ export async function runUrlAudit(opts, c, log = () => {}) {
     const blockedSearch = SEARCH_BOTS.filter((b) => !robotsAllows(robots, b, '/'));
     const blockedTraining = TRAINING_BOTS.filter((b) => !robotsAllows(robots, b, '/'));
     const note = `training bots blocked (a policy choice): ${blockedTraining.join(', ') || 'none'}`;
-    c.add('geo.search-bots', blockedSearch.length ? 'fail' : 'pass', blockedSearch.length ? `search/answer bots blocked: ${blockedSearch.join(', ')}. ${note}` : `search/answer bots allowed. ${note}`);
+    c.add('geo.search-bots', blockedSearch.length ? 'warn' : 'pass', blockedSearch.length ? `search/answer bots blocked in robots.txt: ${blockedSearch.join(', ')} (publishers often do this on purpose; if not intended, you cannot be cited by them). ${note}` : `search/answer bots allowed. ${note}`);
   } else {
     c.add('geo.search-bots', 'pass', 'no robots.txt, so all bots allowed');
   }
@@ -322,12 +372,16 @@ function pageChecks(p, scope, c) {
   c.add('geo.snippet-controls', nosnippet ? 'fail' : 'pass', nosnippet ? `snippet limited (${directives})` : 'no snippet limits', scope);
 
   // canonical
-  if (!d.canonical) c.add('crawl.canonical', 'fail', 'no canonical link', scope);
+  if (!d.canonical) c.add('crawl.canonical', 'warn', 'no canonical link (recommended: a self-referencing canonical)', scope);
   else {
     const abs = /^https?:\/\//i.test(d.canonical);
     const resolved = new URL(d.canonical, pageUrl).toString();
-    if (norm(resolved) !== norm(pageUrl)) c.add('crawl.canonical', 'fail', `canonical ${resolved} ≠ page ${pageUrl}`, scope);
-    else c.add('crawl.canonical', abs ? 'pass' : 'warn', abs ? 'self-referencing' : `relative canonical "${d.canonical}"`, scope);
+    if (norm(resolved) !== norm(pageUrl)) {
+      const toHome = new URL(resolved).pathname === '/' && new URL(pageUrl).pathname !== '/';
+      c.add('crawl.canonical', toHome ? 'fail' : 'warn',
+        toHome ? `canonical points to the HOMEPAGE (${resolved}) although this is ${pageUrl}: tells Google this page duplicates the home`
+          : `canonical ${resolved} ≠ page ${pageUrl} (intentional consolidation?)`, scope);
+    } else c.add('crawl.canonical', abs ? 'pass' : 'warn', abs ? 'self-referencing' : `relative canonical "${d.canonical}"`, scope);
   }
 
   // title / description / h1 / lang / viewport
@@ -337,7 +391,7 @@ function pageChecks(p, scope, c) {
     const n = [...d.title].length;
     c.add('meta.title-length', n >= 15 && n <= 60 ? 'pass' : 'warn', `${n} chars`, scope);
   }
-  if (!d.description) c.add('meta.description', 'fail', 'missing', scope);
+  if (!d.description) c.add('meta.description', p.isHome ? 'fail' : 'warn', 'missing', scope);
   else {
     const dn = [...d.description].length;
     c.add('meta.description', dn >= 50 && dn <= 170 ? 'pass' : 'warn', `${dn} chars${dn < 50 ? ' (too short to be useful)' : dn > 170 ? ' (likely truncated in results)' : ''}`, scope);
@@ -355,12 +409,14 @@ function pageChecks(p, scope, c) {
 
   // Content
   const wc = d.wordCount;
-  c.add('content.server-rendered', wc >= 100 ? 'pass' : wc >= 30 ? 'warn' : 'fail', `${wc} words in the initial HTML`, scope);
+  const shell = looksLikeClientShell(res.body, wc);
+  c.add('content.server-rendered', wc >= 100 ? 'pass' : shell ? 'fail' : 'warn',
+    `${wc} words in the initial HTML${shell ? ' and an empty app container: content is likely added by JavaScript' : wc < 100 ? ' (short page)' : ''}`, scope);
   const imgs = d.images.filter((i) => !(i.src || '').startsWith('data:'));
   const noAlt = imgs.filter((i) => i.alt === undefined);
   c.add('content.img-alt', !imgs.length || !noAlt.length ? 'pass' : noAlt.length / imgs.length > 0.2 ? 'fail' : 'warn', imgs.length ? `${noAlt.length}/${imgs.length} images without alt attribute` : 'no images', scope);
   const host = new URL(pageUrl).hostname;
-  const isInternal = (h) => { try { return new URL(h, pageUrl).hostname === host; } catch { return false; } };
+  const isInternal = (h) => { try { return sameSite(new URL(h, pageUrl).hostname, host); } catch { return false; } };
   const bad = d.anchors.filter((a) => a.href === undefined || a.href === '#' || /^javascript:/i.test(a.href));
   const internal = d.anchors.filter((a) => a.href && !/^(#|javascript:|mailto:|tel:)/i.test(a.href) && isInternal(a.href));
   c.add('content.links', internal.length === 0 && wc >= 30 ? 'fail' : bad.length ? 'warn' : 'pass', `${internal.length} internal link(s)${bad.length ? `, ${bad.length} non-crawlable <a>` : ''}`, scope);
