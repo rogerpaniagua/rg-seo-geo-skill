@@ -54,13 +54,17 @@ The `node skills/...` path only exists **inside** the cloned folder, so `cd` int
 
 ## Use it as a Claude Code skill
 
+One command installs it where Claude Code looks for skills. It creates the folders for you, so there is nothing to clone or copy:
+
 ```bash
-git clone https://github.com/rogerpaniagua/rg-seo-geo-skill.git
-mkdir -p ~/.claude/skills
-cp -R rg-seo-geo-skill/skills/rg-seo-geo-skill ~/.claude/skills/
+npx github:rogerpaniagua/rg-seo-geo-skill --install-skill
 ```
 
-Open Claude Code again and ask: `/rg-seo-geo-skill audit https://your-site.com` (or in plain words: *"audit the SEO and GEO of https://… and the project in ~/code/my-site"*). The skill runs the tool, explains the evidence in your language, and offers fixes (see [`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md) and [`references/source-fixes.md`](skills/rg-seo-geo-skill/references/source-fixes.md)).
+Close and reopen Claude Code, then ask: `/rg-seo-geo-skill audit https://your-site.com` (or in plain words: *"audit the SEO and GEO of https://… and the project in ~/code/my-site"*). The skill runs the tool, explains the evidence in your language, and offers fixes (see [`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md) and [`references/source-fixes.md`](skills/rg-seo-geo-skill/references/source-fixes.md)).
+
+- **Update later:** run the same command with `--force`.
+- **Another folder** (for example a single project's `.claude/skills`): add `--target <folder>`.
+- **Prefer to do it by hand?** `git clone https://github.com/rogerpaniagua/rg-seo-geo-skill.git`, then `mkdir -p ~/.claude/skills`, then `cp -R rg-seo-geo-skill/skills/rg-seo-geo-skill ~/.claude/skills/`. Create the `skills` folder first: if it does not exist, `cp` copies the skill under the wrong name and Claude never loads it.
 
 ## What it checks
 

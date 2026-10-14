@@ -12,11 +12,13 @@ import { Collector, sanitize } from './lib/collector.mjs';
 import { runUrlAudit } from './lib/url-checks.mjs';
 import { runSourceAudit } from './lib/source/index.mjs';
 import { serveStatic } from './lib/static-server.mjs';
+import { installSkill, installMessage } from './lib/install.mjs';
 import { buildReport, toHtml, toMarkdown } from './lib/report.mjs';
 
 const HELP = `rg-seo-geo-skill
 
 Usage:
+  node audit.mjs --install-skill                                (put the skill where Claude Code finds it)
   node audit.mjs --url <https://site> [options]
   node audit.mjs --src <project-dir> [options]
   node audit.mjs --url <https://site> --src <project-dir>      (both)
@@ -34,6 +36,8 @@ Options:
   --allow-local        Allow localhost / private addresses (blocked by default as an SSRF guard)
   --compare <file|auto>  Compare with a previous audit.json and add a "Progress" section. "auto" uses the one already in --out
   --fail-on <tier>     Exit with code 1 if a check of this tier or worse fails: blocker | important
+  --install-skill      Install this skill for Claude Code (copies it to ~/.claude/skills/rg-seo-geo-skill).
+                       --target <dir> installs somewhere else; --force replaces an existing installation.
   --quiet              No progress output
   -h, --help
 `;
@@ -54,6 +58,9 @@ function parseArgs(argv) {
       case '--compare': o.compare = next(); break;
       case '--fail-on': o.failOn = next(); break;
       case '--quiet': o.quiet = true; break;
+      case '--install-skill': o.installSkill = true; break;
+      case '--target': o.target = next(); break;
+      case '--force': o.force = true; break;
       case '-h': case '--help': o.help = true; break;
       default: throw new Error(`Unknown argument: ${a}`);
     }
@@ -63,6 +70,11 @@ function parseArgs(argv) {
 
 async function main() {
   const o = parseArgs(process.argv.slice(2));
+  if (o.installSkill) {
+    if (!['es', 'en'].includes(o.lang)) throw new Error('--lang must be es or en');
+    process.stdout.write(installMessage(installSkill({ target: o.target, force: o.force }), o.lang));
+    return;
+  }
   if (o.build && o.url) throw new Error('--build and --url cannot be used together (a build is audited locally; a URL is audited as published)');
   if (o.help || (!o.url && !o.src && !o.build)) { process.stdout.write(HELP); process.exit(o.help ? 0 : 2); }
   if (!['es', 'en'].includes(o.lang)) throw new Error('--lang must be es or en');

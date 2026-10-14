@@ -54,13 +54,17 @@ La ruta `node skills/...` solo existe **dentro** de la carpeta clonada, por eso 
 
 ## Úsala como skill de Claude Code
 
+Un solo comando la instala donde Claude Code busca las skills. Crea las carpetas por ti, así que no hay nada que clonar ni copiar:
+
 ```bash
-git clone https://github.com/rogerpaniagua/rg-seo-geo-skill.git
-mkdir -p ~/.claude/skills
-cp -R rg-seo-geo-skill/skills/rg-seo-geo-skill ~/.claude/skills/
+npx github:rogerpaniagua/rg-seo-geo-skill --install-skill
 ```
 
-Vuelve a abrir Claude Code y pide: `/rg-seo-geo-skill audita https://tu-sitio.com` (o con palabras normales: *"audita el SEO y GEO de https://… y del proyecto en ~/code/mi-sitio"*). La skill ejecuta la herramienta, explica la evidencia en tu idioma y propone correcciones ([`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md) y [`references/source-fixes.md`](skills/rg-seo-geo-skill/references/source-fixes.md)).
+Cierra y vuelve a abrir Claude Code, y pide: `/rg-seo-geo-skill audita https://tu-sitio.com` (o con palabras normales: *"audita el SEO y GEO de https://… y del proyecto en ~/code/mi-sitio"*). La skill ejecuta la herramienta, explica la evidencia en tu idioma y propone correcciones ([`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md) y [`references/source-fixes.md`](skills/rg-seo-geo-skill/references/source-fixes.md)).
+
+- **Actualizarla después:** ejecuta el mismo comando con `--force`.
+- **Otra carpeta** (por ejemplo el `.claude/skills` de un solo proyecto): agrega `--target <carpeta>`.
+- **¿Prefieres hacerlo a mano?** `git clone https://github.com/rogerpaniagua/rg-seo-geo-skill.git`, luego `mkdir -p ~/.claude/skills`, y luego `cp -R rg-seo-geo-skill/skills/rg-seo-geo-skill ~/.claude/skills/`. Crea primero la carpeta `skills`: si no existe, `cp` copia la skill con el nombre equivocado y Claude nunca la carga.
 
 ## Qué no hace
 
