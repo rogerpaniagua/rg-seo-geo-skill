@@ -1,0 +1,19 @@
+name: release-zip
+# When a release is published, build the skill zip (the folder Claude's "upload a skill" expects) and attach it.
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the zip with the skill folder at its root
+        run: cd skills && zip -rq ../rg-seo-geo-skill.zip rg-seo-geo-skill -x '*.DS_Store' -x '*/node_modules/*'
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" rg-seo-geo-skill.zip --clobber
