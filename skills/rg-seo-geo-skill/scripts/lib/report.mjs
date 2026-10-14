@@ -1,6 +1,7 @@
 import { CHECK_BY_ID, CATEGORIES, TIER_ORDER } from './catalog.mjs';
 import { STACK_HINTS } from './stack.mjs';
 import { sanitize } from './collector.mjs';
+import { translateList } from './evidence-i18n.mjs';
 
 const UI = {
   en: {
@@ -119,7 +120,7 @@ export function buildReport(results, meta, lang = 'es', previous) {
   const L = (o) => o[lang] || o.en;
   const findings = results.map((r) => {
     const c = CHECK_BY_ID.get(r.id);
-    return { ...r, evidence: Array.isArray(r.evidence) ? r.evidence : [], category: c.category, tier: c.tier, basis: c.basis, title: L(c.title), why: L(c.why), fix: L(c.fix), source: c.source };
+    return { ...r, evidence: Array.isArray(r.evidence) ? r.evidence : [], category: c.category, tier: c.tier, basis: c.basis, title: L(c.title), why: L(c.why), fix: L(c.fix), source: c.source, evidenceShown: translateList(Array.isArray(r.evidence) ? r.evidence : [], lang) };
   });
   const count = (f) => findings.filter(f).length;
   const blockers = count((f) => f.status === 'fail' && f.tier === 'blocker');
@@ -177,7 +178,7 @@ export function toMarkdown(r) {
   }
   if (r.fixFirst.length) {
     out.push(`## ${t.fixFirst}`, '');
-    r.fixFirst.forEach((f, i) => out.push(`${i + 1}. **[${t.tiers[f.tier]}] ${f.title}**  \n   ${f.fix}${f.evidence.length ? `  \n   _${t.evidence}:_ ${mdEsc(f.evidence.join(' / '))}` : ''}  \n   ${f.source}`));
+    r.fixFirst.forEach((f, i) => out.push(`${i + 1}. **[${t.tiers[f.tier]}] ${f.title}**  \n   ${f.fix}${f.evidenceShown.length ? `  \n   _${t.evidence}:_ ${mdEsc(f.evidenceShown.join(' / '))}` : ''}  \n   ${f.source}`));
     out.push('');
   }
   out.push(`## ${t.allFindings}`, '');
@@ -185,7 +186,7 @@ export function toMarkdown(r) {
     out.push(`### ${cat.name}`, '', `| | ${t.tiers.blocker}/${t.tiers.important}/${t.tiers.advice} | | ${t.evidence} |`, '|---|---|---|---|');
     for (const f of cat.items) {
       const icon = { fail: '❌', warn: '⚠️', pass: '✅', info: 'ℹ️', skip: '⏭️' }[f.status];
-      out.push(`| ${icon} | ${t.tiers[f.tier]} | ${f.title} (${t.basis[f.basis]}) | ${mdEsc(f.evidence.join(' / '))} |`);
+      out.push(`| ${icon} | ${t.tiers[f.tier]} | ${f.title} (${t.basis[f.basis]}) | ${mdEsc(f.evidenceShown.join(' / '))} |`);
     }
     out.push('');
   }
@@ -212,7 +213,7 @@ export function toHtml(r) {
         <span class="chips"><span class="chip tier">${esc(t.tiers[f.tier])}</span><span class="chip basis-${f.basis}">${esc(t.basis[f.basis])}</span></span>
       </header>
       ${f.status === 'pass' || f.status === 'skip' || f.status === 'info' ? '' : `<p><b>${t.why}.</b> ${esc(f.why)}</p><p><b>${t.fix}.</b> ${esc(f.fix)}</p>`}
-      ${f.evidence.length ? `<ul class="evidence">${f.evidence.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+      ${f.evidenceShown.length ? `<ul class="evidence">${f.evidenceShown.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
       <p class="ref"><a href="${esc(f.source)}" target="_blank" rel="noopener">${t.ref}</a></p>
     </article>`;
 
@@ -304,7 +305,7 @@ footer{margin-top:40px;font-size:.88rem;color:var(--muted);border-top:1px solid 
 
   ${progressHtml}
 
-  ${r.fixFirst.length ? `<h2>${esc(t.fixFirst)}</h2><ol class="first">${r.fixFirst.map((f) => `<li><b>${esc(f.title)}</b> <span class="chip tier">${esc(t.tiers[f.tier])}</span><br>${esc(f.fix)}${f.evidence.length ? `<br><span class="muted">${esc(f.evidence[0])}</span>` : ''}</li>`).join('')}</ol>` : ''}
+  ${r.fixFirst.length ? `<h2>${esc(t.fixFirst)}</h2><ol class="first">${r.fixFirst.map((f) => `<li><b>${esc(f.title)}</b> <span class="chip tier">${esc(t.tiers[f.tier])}</span><br>${esc(f.fix)}${f.evidenceShown.length ? `<br><span class="muted">${esc(f.evidenceShown[0])}</span>` : ''}</li>`).join('')}</ol>` : ''}
 
   <h2>${esc(t.allFindings)}</h2>
   ${r.byCategory.map(section).join('')}

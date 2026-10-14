@@ -142,7 +142,7 @@ async function main() {
   fs.mkdirSync(o.out, { recursive: true });
   safeWrite(targets[0], toHtml(report));
   safeWrite(targets[1], toMarkdown(report));
-  safeWrite(targets[2], JSON.stringify({ notice: report.t.untrusted, meta, verdict: report.verdict, totals: report.totals, findings: report.findings }, null, 2));
+  safeWrite(targets[2], JSON.stringify({ notice: report.t.untrusted, meta, verdict: report.verdict, totals: report.totals, findings: report.findings.map(({ evidenceShown, ...f }) => f) }, null, 2));
 
   const tt = report.totals;
   process.stdout.write(`${report.t.verdict[report.verdict]}\n` +

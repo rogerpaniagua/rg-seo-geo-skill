@@ -26,3 +26,8 @@ Report vulnerabilities privately, see [SECURITY.md](SECURITY.md).
 
 Zero runtime dependencies. Node 18+. Linear-time parsing only: no regular expression with nested or lazy quantifiers over
 documents written by third parties.
+
+## Spanish reports and the website
+
+- **Evidence phrases.** Checks write evidence in English and `audit.json` keeps it that way. Spanish reports translate each phrase at render time with a rule in `skills/rg-seo-geo-skill/scripts/lib/evidence-i18n.mjs`. If you add or reword an evidence string, add or update its rule: `test/evidence-i18n.test.mjs` fails when a phrase has no Spanish translation. Text quoted from the audited site is never translated.
+- **Install instructions.** The skill's page on rogerpaniagua.com (repo `rogerpaniagua/r-ai`, `lib/skills.ts`) copies the install steps from the README. If you change how the skill is installed, update that page in the same change. Every command there must work from any folder, without a clone.
