@@ -16,34 +16,51 @@ There is deliberately **no composite 0–100 score**. The verdict comes from blo
 
 ## Quick start
 
-Requires Node 18+. No install, no dependencies.
+**You need Node 18 or newer.** Check with `node -v` (install it from [nodejs.org](https://nodejs.org) if the command is not found). Nothing else to install.
+
+Run this from **any** folder. It downloads the tool from GitHub the first time and runs it, with no cloning:
 
 ```bash
-# any published site
-node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://example.com --lang en
-
-# a project folder (Next.js, Astro, Nuxt, SvelteKit, Vite SPA, Jekyll, Hugo, Laravel, Django, WordPress...) + its live URL
-node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://example.com --src ../my-site --out ./report
-
-# before deploying, any stack: audit the compiled output (dist, out, public, _site, build...)
-node skills/rg-seo-geo-skill/scripts/audit.mjs --build ./dist
-
-# show progress against the previous audit stored in the output folder
-node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://example.com --out ./report --compare auto
-
-# CI gate: exit code 1 on blockers
-node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://staging.example.com --fail-on blocker --quiet
+npx github:rogerpaniagua/rg-seo-geo-skill --url https://example.com --lang en
 ```
 
-Output: `report.html` (team report), `report.md`, `audit.json`.
+It writes `report.html` (the team report), `report.md` and `audit.json` into `./seo-geo-report`. More examples:
+
+```bash
+# a project folder (Next.js, Astro, Nuxt, SvelteKit, Vite SPA, Jekyll, Hugo, Laravel, Django, WordPress...) + its live URL
+npx github:rogerpaniagua/rg-seo-geo-skill --url https://example.com --src ../my-site --out ./report
+
+# before deploying, any stack: audit the compiled output (dist, out, public, _site, build...)
+npx github:rogerpaniagua/rg-seo-geo-skill --build ./dist
+
+# show progress against the previous audit stored in the output folder
+npx github:rogerpaniagua/rg-seo-geo-skill --url https://example.com --out ./report --compare auto
+
+# CI gate: exit code 1 on blockers
+npx github:rogerpaniagua/rg-seo-geo-skill --url https://staging.example.com --fail-on blocker --quiet
+```
+
+Run it with `--help` for every option. Paths like `../my-site` or `./dist` are relative to the folder you run the command from.
+
+### Prefer a local copy?
+
+```bash
+git clone https://github.com/rogerpaniagua/rg-seo-geo-skill.git
+cd rg-seo-geo-skill
+node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://example.com --lang en
+```
+
+The `node skills/...` path only exists **inside** the cloned folder, so `cd` into it first.
 
 ## Use it as a Claude Code skill
 
 ```bash
-cp -R skills/rg-seo-geo-skill ~/.claude/skills/
+git clone https://github.com/rogerpaniagua/rg-seo-geo-skill.git
+mkdir -p ~/.claude/skills
+cp -R rg-seo-geo-skill/skills/rg-seo-geo-skill ~/.claude/skills/
 ```
 
-Then ask Claude: *"audit the SEO and GEO of https://… and the project in ~/code/my-site"*. The skill runs the script, explains the evidence in your language, and offers fixes (see [`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md)).
+Open Claude Code again and ask: `/rg-seo-geo-skill audit https://your-site.com` (or in plain words: *"audit the SEO and GEO of https://… and the project in ~/code/my-site"*). The skill runs the tool, explains the evidence in your language, and offers fixes (see [`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md) and [`references/source-fixes.md`](skills/rg-seo-geo-skill/references/source-fixes.md)).
 
 ## What it checks
 

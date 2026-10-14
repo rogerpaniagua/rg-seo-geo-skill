@@ -16,34 +16,51 @@ A propósito **no hay un puntaje 0–100**. El veredicto sale de bloqueantes y f
 
 ## Inicio rápido
 
-Requiere Node 18+. Sin instalar nada.
+**Necesitas Node 18 o más nuevo.** Compruébalo con `node -v` (si el comando no existe, instálalo desde [nodejs.org](https://nodejs.org)). No hay nada más que instalar.
+
+Ejecuta esto desde **cualquier** carpeta. Descarga la herramienta de GitHub la primera vez y la ejecuta, sin clonar nada:
 
 ```bash
-# cualquier sitio publicado
-node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com
-
-# una carpeta de proyecto (Next.js, Astro, Nuxt, SvelteKit, SPA con Vite, Jekyll, Hugo, Laravel, Django, WordPress...) + su URL en vivo
-node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com --src ../mi-sitio --out ./reporte
-
-# antes de publicar, cualquier tecnología: audita la carpeta compilada (dist, out, public, _site, build...)
-node skills/rg-seo-geo-skill/scripts/audit.mjs --build ./dist
-
-# muestra el progreso frente a la auditoría anterior guardada en la carpeta de salida
-node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com --out ./reporte --compare auto
-
-# puerta de CI: código de salida 1 si hay bloqueantes
-node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://staging.ejemplo.com --fail-on blocker --quiet
+npx github:rogerpaniagua/rg-seo-geo-skill --url https://ejemplo.com --lang es
 ```
 
-Resultado: `report.html` (reporte para el equipo), `report.md`, `audit.json`.
+Escribe `report.html` (el reporte para el equipo), `report.md` y `audit.json` en `./seo-geo-report`. Más ejemplos:
+
+```bash
+# una carpeta de proyecto (Next.js, Astro, Nuxt, SvelteKit, SPA con Vite, Jekyll, Hugo, Laravel, Django, WordPress...) + su URL en vivo
+npx github:rogerpaniagua/rg-seo-geo-skill --url https://ejemplo.com --src ../mi-sitio --out ./reporte
+
+# antes de publicar, cualquier tecnología: audita la carpeta compilada (dist, out, public, _site, build...)
+npx github:rogerpaniagua/rg-seo-geo-skill --build ./dist
+
+# muestra el progreso frente a la auditoría anterior guardada en la carpeta de salida
+npx github:rogerpaniagua/rg-seo-geo-skill --url https://ejemplo.com --out ./reporte --compare auto
+
+# puerta de CI: código de salida 1 si hay bloqueantes
+npx github:rogerpaniagua/rg-seo-geo-skill --url https://staging.ejemplo.com --fail-on blocker --quiet
+```
+
+Usa `--help` para ver todas las opciones. Rutas como `../mi-sitio` o `./dist` son relativas a la carpeta desde la que ejecutas el comando.
+
+### ¿Prefieres una copia local?
+
+```bash
+git clone https://github.com/rogerpaniagua/rg-seo-geo-skill.git
+cd rg-seo-geo-skill
+node skills/rg-seo-geo-skill/scripts/audit.mjs --url https://ejemplo.com --lang es
+```
+
+La ruta `node skills/...` solo existe **dentro** de la carpeta clonada, por eso primero hay que entrar con `cd`.
 
 ## Úsala como skill de Claude Code
 
 ```bash
-cp -R skills/rg-seo-geo-skill ~/.claude/skills/
+git clone https://github.com/rogerpaniagua/rg-seo-geo-skill.git
+mkdir -p ~/.claude/skills
+cp -R rg-seo-geo-skill/skills/rg-seo-geo-skill ~/.claude/skills/
 ```
 
-Luego pídele a Claude: *"audita el SEO y GEO de https://… y del proyecto en ~/code/mi-sitio"*. La skill ejecuta el script, explica la evidencia en tu idioma y propone correcciones ([`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md)).
+Vuelve a abrir Claude Code y pide: `/rg-seo-geo-skill audita https://tu-sitio.com` (o con palabras normales: *"audita el SEO y GEO de https://… y del proyecto en ~/code/mi-sitio"*). La skill ejecuta la herramienta, explica la evidencia en tu idioma y propone correcciones ([`references/nextjs-fixes.md`](skills/rg-seo-geo-skill/references/nextjs-fixes.md) y [`references/source-fixes.md`](skills/rg-seo-geo-skill/references/source-fixes.md)).
 
 ## Qué no hace
 
