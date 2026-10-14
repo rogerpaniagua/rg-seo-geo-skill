@@ -341,9 +341,9 @@ export const CHECKS = [
   },
   {
     id: 'geo.bot-access', category: 'geo', tier: 'important', basis: 'measured', mode: 'url',
-    title: { en: 'The server/CDN does not block AI crawler user-agents', es: 'El servidor/CDN no bloquea user-agents de rastreadores de IA' },
-    why: { en: 'A WAF or bot-protection rule can return 403 to AI crawlers even when robots.txt allows them.', es: 'Un WAF o protección anti-bots puede devolver 403 a rastreadores de IA aunque robots.txt los permita.' },
-    fix: { en: 'Allow-list the AI search crawlers in your CDN/WAF.', es: 'Permite los rastreadores de búsqueda de IA en tu CDN/WAF.' },
+    title: { en: 'The server/CDN lets AI search crawlers through', es: 'El servidor/CDN deja pasar a los rastreadores de búsqueda con IA' },
+    why: { en: 'A WAF or bot-protection rule can return 403 to AI crawlers even when robots.txt allows them. Only search/answer bots (OAI-SearchBot, PerplexityBot) matter for being cited. Refusing the training bots (GPTBot, ClaudeBot) is a legitimate policy and is reported as information, not as a problem.', es: 'Un WAF o protección anti-bots puede devolver 403 a rastreadores de IA aunque robots.txt los permita. Solo los bots de búsqueda/respuesta (OAI-SearchBot, PerplexityBot) importan para ser citado. Rechazar a los bots de entrenamiento (GPTBot, ClaudeBot) es una política legítima y se informa como dato, no como problema.' },
+    fix: { en: 'Allow-list the AI search crawlers in your CDN/WAF (the training bots are your call).', es: 'Permite los rastreadores de búsqueda de IA en tu CDN/WAF (los de entrenamiento es decisión tuya).' },
     source: 'https://platform.openai.com/docs/bots',
   },
   {

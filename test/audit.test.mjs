@@ -444,3 +444,59 @@ test('trust pages: warn only when the homepage gives NO "who is behind this" lin
   assert.equal(status((await run('<a href="#contact">c</a>')).r, 'geo.trust-pages'), 'pass');
   assert.equal(status((await run('<a href="/blog">b</a>')).r, 'geo.trust-pages'), 'warn');
 });
+
+// ---- found while auditing elaniin.com with a real team ----
+test('sitemap URLs refused with 401/403/429/503 are "not evaluated", never failures', async () => {
+  const mk = (extra) => auditPages((req, res, base) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end(`Sitemap: ${base}/sitemap.xml`); }
+    if (req.url === '/sitemap.xml') { res.setHeader('content-type', 'application/xml'); return res.end(`<urlset><url><loc>${base}/</loc></url><url><loc>${base}/ok</loc></url><url><loc>${base}/protected</loc></url>${extra ? `<url><loc>${base}/gone</loc></url>` : ''}</urlset>`); }
+    if (req.url === '/' || req.url === '/ok') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    if (req.url === '/protected') { res.statusCode = 403; return res.end('Access denied'); }
+    res.statusCode = 404; res.end('nf');
+  }, { maxPages: 2 });
+  const protectedOnly = (await mk(false)).r.find((x) => x.id === 'crawl.sitemap-urls');
+  assert.equal(protectedOnly.status, 'pass', JSON.stringify(protectedOnly));
+  assert.match(protectedOnly.evidence.join(' '), /not evaluated.*\/protected|\/protected.*not evaluated/i);
+  const withBroken = (await mk(true)).r.find((x) => x.id === 'crawl.sitemap-urls');
+  assert.equal(withBroken.status, 'fail');
+  assert.match(withBroken.evidence.join(' '), /\/gone/);
+  assert.doesNotMatch(withBroken.evidence.join(' '), /\/protected: HTTP 403/);      // the refused URL is not reported as broken
+});
+
+test('sitemap URLs: when every sampled URL is refused the check is skipped, not passed', async () => {
+  const { r } = await auditPages((req, res, base) => {
+    if (req.url === '/robots.txt') { res.setHeader('content-type', 'text/plain'); return res.end(`Sitemap: ${base}/sitemap.xml`); }
+    if (req.url === '/sitemap.xml') { res.setHeader('content-type', 'application/xml'); return res.end(`<urlset><url><loc>${base}/a</loc></url><url><loc>${base}/b</loc></url></urlset>`); }
+    if (req.url === '/') { res.setHeader('content-type', 'text/html'); return res.end(html()); }
+    res.statusCode = 403; res.end('no');
+  }, { maxPages: 1 });
+  assert.equal(status(r, 'crawl.sitemap-urls'), 'skip');
+});
+
+const botServer = (blockedRe) => auditPages((req, res) => {
+  if (req.url === '/') {
+    if (blockedRe.test(String(req.headers['user-agent'] || ''))) { res.statusCode = 403; return res.end('blocked'); }
+    res.setHeader('content-type', 'text/html'); return res.end(html());
+  }
+  res.statusCode = 404; res.end('nf');
+}, { maxPages: 1 });
+
+test('AI bots at the server: blocking only TRAINING bots (GPTBot, ClaudeBot) is a policy choice, not a warning', async () => {
+  const { r } = await botServer(/GPTBot|ClaudeBot/);
+  const x = r.find((y) => y.id === 'geo.bot-access');
+  assert.equal(x.status, 'pass', JSON.stringify(x));
+  assert.match(x.evidence.join(' '), /GPTBot/);
+  assert.match(x.evidence.join(' '), /ClaudeBot/);
+  assert.match(x.evidence.join(' '), /training/i);
+  assert.match(x.evidence.join(' '), /search/i);                       // says the search bots get through
+});
+
+test('AI bots at the server: blocking a SEARCH bot (OAI-SearchBot, PerplexityBot) warns and names it', async () => {
+  const one = (await botServer(/OAI-SearchBot/)).r.find((y) => y.id === 'geo.bot-access');
+  assert.equal(one.status, 'warn');
+  assert.match(one.evidence.join(' '), /OAI-SearchBot/);
+  const all = (await botServer(/GPTBot|ClaudeBot|OAI-SearchBot|PerplexityBot/)).r.find((y) => y.id === 'geo.bot-access');
+  assert.equal(all.status, 'warn');
+  assert.match(all.evidence.join(' '), /PerplexityBot/);
+  assert.equal((await botServer(/nothing-matches-this/)).r.find((y) => y.id === 'geo.bot-access').status, 'pass');
+});

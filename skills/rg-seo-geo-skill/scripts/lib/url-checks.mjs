@@ -8,6 +8,7 @@ import net from 'node:net';
 
 const SEARCH_BOTS = ['OAI-SearchBot', 'ChatGPT-User', 'PerplexityBot', 'Claude-SearchBot', 'Claude-User', 'Googlebot', 'Bingbot'];
 const TRAINING_BOTS = ['GPTBot', 'ClaudeBot', 'Google-Extended', 'CCBot', 'Applebot-Extended', 'Bytespider'];
+const BOT_KIND = { 'OAI-SearchBot': 'search', PerplexityBot: 'search', ClaudeBot: 'training', GPTBot: 'training' };
 const BOT_UAS = {
   'OAI-SearchBot': 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot',
   PerplexityBot: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)',
@@ -238,13 +239,23 @@ export async function runUrlAudit(opts, c, log = () => {}) {
       if (r.status === 405 || r.status === 501 || r.error) r = await fetchUrl(u, { ...net_, follow: false });
       return { u, status: r.status, loc: r.headers && r.headers.location, error: r.error };
     });
+    // 401/403/429/503 mean the server refused an automated visitor (bot protection, login, rate limit). That says nothing
+    // about the URL, exactly as with the page checks, so those URLs are "not evaluated" instead of "broken".
+    const refused = [];
+    let evaluated = 0;
     for (const r of results) {
       if (r.error) problems.push(`${r.u}: ${r.error}`);
-      else if (r.status >= 300 && r.status < 400) problems.push(`${r.u}: redirects (${r.status}) to ${r.loc}`);
-      else if (r.status !== 200) problems.push(`${r.u}: HTTP ${r.status}`);
+      else if ([401, 403, 429, 451, 503].includes(r.status)) refused.push(pathOf(r.u) || r.u);
+      else {
+        evaluated++;
+        if (r.status >= 300 && r.status < 400) problems.push(`${r.u}: redirects (${r.status}) to ${r.loc}`);
+        else if (r.status !== 200) problems.push(`${r.u}: HTTP ${r.status}`);
+      }
     }
+    const refusedNote = refused.length ? `not evaluated (automated access refused, confirm in a browser): ${refused.slice(0, 3).join(', ')}` : '';
     const all = [...problems, ...soft.slice(0, 3).map((x) => `${x} (sibling subdomain: valid only if verified together in Search Console)`)];
-    c.add('crawl.sitemap-urls', problems.length ? 'fail' : soft.length ? 'warn' : 'pass', all.length ? all.slice(0, 5).join(' | ') : `${results.length} sampled URLs return 200 on the right host`);
+    const evidence = all.length ? all.slice(0, 5).join(' | ') : `${evaluated} sampled URLs return 200 on the right host`;
+    c.add('crawl.sitemap-urls', problems.length ? 'fail' : soft.length ? 'warn' : evaluated === 0 && refused.length ? 'skip' : 'pass', [evidence, refusedNote].filter(Boolean).join(' | '));
   } else {
     c.add('crawl.sitemap-urls', 'skip', 'no sitemap URLs');
     c.add('crawl.sitemap-limits', 'skip', 'no sitemap');
@@ -366,14 +377,21 @@ export async function runUrlAudit(opts, c, log = () => {}) {
     c.add('geo.search-bots', 'pass', 'no robots.txt, so all bots allowed');
   }
   const baseline = first.status;
-  const blockedUas = [];
+  const blockedSearch = [];
+  const blockedTraining = [];
   for (const [name, ua] of Object.entries(opts.localBuild ? {} : BOT_UAS)) {
     const r = await fetchUrl(first.finalUrl, { ...net_, ua, maxBytes: 200_000 });
-    if (baseline === 200 && [401, 403, 429, 503].includes(r.status)) blockedUas.push(`${name}→${r.status}`);
+    if (baseline === 200 && [401, 403, 429, 503].includes(r.status)) (BOT_KIND[name] === 'search' ? blockedSearch : blockedTraining).push(`${name}→${r.status}`);
   }
+  const searchBots = Object.keys(BOT_KIND).filter((n) => BOT_KIND[n] === 'search');
   if (opts.localBuild) c.add('geo.bot-access', 'skip', 'a local build has no CDN/WAF; check bot access on the deployed site');
-  else c.add('geo.bot-access', blockedUas.length ? 'warn' : 'pass',
-    blockedUas.length ? `${blockedUas.join(', ')} while a normal browser UA gets 200. Could be WAF impersonation protection (these requests come from a non-official IP); confirm in CDN logs.` : 'AI crawler user-agents receive the same 200 as browsers');
+  else if (blockedSearch.length) {
+    // A search/answer bot that cannot reach the site cannot cite it: worth a look.
+    c.add('geo.bot-access', 'warn', `search/answer bots refused at the server: ${blockedSearch.join(', ')} while a normal browser gets 200.${blockedTraining.length ? ` Training bots also refused: ${blockedTraining.join(', ')}.` : ''} Could be WAF impersonation protection (these requests come from a non-official IP); confirm in CDN logs.`);
+  } else if (blockedTraining.length) {
+    // Refusing the bots that collect training data is a legitimate policy; the bots that search and cite still get through.
+    c.add('geo.bot-access', 'pass', `training bots refused at the server (a policy choice): ${blockedTraining.join(', ')}. Search/answer bots (${searchBots.join(', ')}) reach the site, so they can still read and cite your pages.`);
+  } else c.add('geo.bot-access', 'pass', 'AI crawler user-agents receive the same 200 as browsers');
   const llms = await fetchUrl(`${origin}/llms.txt`, { ...net_, maxBytes: 200_000 });
   const hasLlms = llms.status === 200 && !/<html/i.test(llms.body.slice(0, 300));
   c.add('geo.llms-txt', 'info', hasLlms ? 'present (no proven effect)' : 'not present (no proven effect either way)');
